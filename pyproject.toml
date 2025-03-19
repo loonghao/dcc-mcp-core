@@ -24,7 +24,7 @@ classifiers = [
 dependencies = [
     "loguru (>=0.7.3,<0.8.0)",
     "platformdirs (>=3,<4.0.0)",
-    "pydantic (>=1.10.0,<2.0.0)",
+    "pydantic (>=2.10.6,<2.11.0)",
     "importlib-metadata (>=4.6.0,<5.0.0); python_version < '3.8'"
 ]
 
@@ -178,7 +178,7 @@ classifiers = [
 python = ">=3.7,<4.0"
 loguru = ">=0.7.3,<0.8.0"
 platformdirs = ">=3,<4.0.0"
-pydantic = ">=1.10.0,<2.0.0"
+pydantic = ">=2.10.6,<2.11.0"
 
 [tool.poetry.urls]
 Homepage = "https://github.com/loonghao/dcc-mcp-core"
