@@ -1,28 +1,37 @@
 # dcc-mcp-core
 
+[![Python](https://img.shields.io/badge/Python-3.7%2B-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
+[![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen)](https://github.com/loonghao/dcc-mcp-core/actions)
+
+[中文文档](README_zh.md)
+
 Foundational library for the DCC Model Context Protocol (MCP) ecosystem. It provides common utilities, base classes, and shared functionality that are used across all other DCC-MCP packages.
+
+> **Note**: This project is in early development stage. The API may change at any time without prior notice.
 
 ## Design Philosophy and Workflow
 
-DCC-MCP-Core is a plugin management system designed for Digital Content Creation (DCC) applications, aiming to provide a unified interface that allows AI to interact with various DCC software (such as Maya, Blender, Houdini, etc.).
+DCC-MCP-Core is an action management system designed for Digital Content Creation (DCC) applications, aiming to provide a unified interface that allows AI to interact with various DCC software (such as Maya, Blender, Houdini, etc.).
 
 ### Core Workflow
 
 1. **MCP Server**: Acts as a central coordinator, receiving requests from AI
 2. **DCC-MCP**: Connects the MCP server and specific DCC software
-3. **Plugin Discovery and Loading**: DCC-MCP-Core is responsible for discovering, loading, and managing plugins
-4. **Structured Information Return**: Returns plugin information in an AI-friendly structured format to the MCP server
-5. **Function Calls and Result Return**: MCP server calls the corresponding plugin functions and returns the results to AI
+3. **Action Discovery and Loading**: DCC-MCP-Core is responsible for discovering, loading, and managing actions
+4. **Structured Information Return**: Returns action information in an AI-friendly structured format to the MCP server
+5. **Function Calls and Result Return**: MCP server calls the corresponding action functions and returns the results to AI
 
 ```mermaid
 graph LR
-    %% 增加图表宽度
+    %% Increase chart width
     classDef default width:120px,height:60px
 
     AI[AI Assistant] -->|"1. Send Request"| MCP[MCP Server]
     MCP -->|"2. Forward Request"| DCCMCP[DCC-MCP]
-    DCCMCP -->|"3. Discover & Load"| Plugins[DCC Plugins]
-    Plugins -->|"4. Return Info"| DCCMCP
+    DCCMCP -->|"3. Discover & Load"| Actions[DCC Actions]
+    Actions -->|"4. Return Info"| DCCMCP
     DCCMCP -->|"5. Structured Data"| MCP
     MCP -->|"6. Call Function"| DCCMCP
     DCCMCP -->|"7. Execute"| DCC[DCC Software]
@@ -30,23 +39,23 @@ graph LR
     DCCMCP -->|"9. Structured Result"| MCP
     MCP -->|"10. Return Result"| AI
 
-    %% 使用更鲜明的颜色和更大的节点
+    %% Use more vibrant colors and larger nodes
     classDef ai fill:#f9d,stroke:#333,stroke-width:4px,color:#000,font-weight:bold
     classDef mcp fill:#bbf,stroke:#333,stroke-width:4px,color:#000,font-weight:bold
     classDef dcc fill:#bfb,stroke:#333,stroke-width:4px,color:#000,font-weight:bold
-    classDef plugin fill:#fbb,stroke:#333,stroke-width:4px,color:#000,font-weight:bold
+    classDef action fill:#fbb,stroke:#333,stroke-width:4px,color:#000,font-weight:bold
 
     class AI ai
     class MCP,DCCMCP mcp
     class DCC dcc
-    class Plugins plugin
+    class Actions action
 ```
 
-### Plugin Design
+### Action Design
 
-Plugins use a simple and intuitive design, allowing developers to easily create new DCC functionality:
+Actions use a simple and intuitive design, allowing developers to easily create new DCC functionality:
 
-- **Metadata Declaration**: Define basic plugin information through simple variables
+- **Metadata Declaration**: Define basic action information through simple variables
 - **Function Definition**: Implement specific DCC operation functionality
 - **Context Passing**: Access DCC software's remote interface through the context parameter
 - **Structured Return**: All functions return standardized structured data
@@ -56,8 +65,36 @@ Plugins use a simple and intuitive design, allowing developers to easily create 
 DCC-MCP-Core uses RPyC to implement remote procedure calls, allowing DCC operations to be executed in different processes or even on different machines:
 
 - **Context Object**: Contains remote DCC client and command interface
-- **Transparent Access**: Plugin code can access remote DCC APIs as if they were local
+- **Transparent Access**: Action code can access remote DCC APIs as if they were local
 - **Error Handling**: Unified error handling mechanism ensures stable operation
+
+## Package Structure
+
+DCC-MCP-Core is organized into several subpackages:
+
+- **actions**: Action management and generation
+  - `generator.py`: Generates action templates
+  - `manager.py`: Manages action discovery and loading
+  - `metadata.py`: Defines action metadata structures
+
+- **models**: Data models for the MCP ecosystem
+  - `action_result.py`: Structured result model for actions
+
+- **parameters**: Parameter handling and validation
+  - `groups.py`: Parameter grouping and dependencies
+  - `models.py`: Parameter data models
+  - `processor.py`: Parameter processing utilities
+  - `validation.py`: Parameter validation logic
+
+- **templates**: Template handling
+  - `utils.py`: Template rendering with Jinja2
+
+- **utils**: Utility functions and helpers
+  - `constants.py`: Common constants
+  - `decorators.py`: Function decorators for error handling and result formatting
+  - `exceptions.py`: Exception hierarchy
+  - `platform.py`: Platform-specific utilities
+  - `template.py`: Template utilities
 
 ## Features
 
@@ -66,15 +103,9 @@ DCC-MCP-Core uses RPyC to implement remote procedure calls, allowing DCC operati
 - Common exception hierarchy
 - Utility functions for DCC integration
 - Version compatibility checking
-- Plugin management system for DCC-specific functionality
+- Action management system for DCC-specific functionality
 - AI-friendly structured data interfaces
 - Remote procedure call support via RPyC
-
-## Requirements
-
-- Python 3.7+
-- Compatible with Windows, macOS, and Linux
-- Designed to work within DCC software Python environments
 
 ## Installation
 
@@ -82,123 +113,116 @@ DCC-MCP-Core uses RPyC to implement remote procedure calls, allowing DCC operati
 pip install dcc-mcp-core
 ```
 
-## Usage
+## Development Setup
 
-### Basic Usage
+```bash
+# Clone the repository
+git clone https://github.com/loonghao/dcc-mcp-core.git
+cd dcc-mcp-core
+
+# Create and activate virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install development dependencies
+pip install -e .
+pip install pytest pytest-cov pytest-mock pyfakefs
+```
+
+## Running Tests
+
+```bash
+# Run tests with coverage
+uvx nox -s pytest
+
+# Run specific tests
+python -m pytest tests/test_action_manager.py -v
+```
+
+## Example Usage
+
+### Discovering and Loading Actions
 
 ```python
-from dcc_mcp_core.plugin_manager import create_plugin_manager
-from dcc_mcp_core import filesystem
+from dcc_mcp_core.actions.manager import ActionManager
 
-# Initialize a plugin manager for a specific DCC application
-plugin_manager = create_plugin_manager("maya")
+# Create an action manager for Maya
+manager = ActionManager('maya')
 
-# Discover and load all available plugins
-plugin_manager.discover_plugins()
+# Discover available actions
+actions_info = manager.get_actions_info()
 
-# Get information about all loaded plugins (AI-friendly structured data)
-plugins_info = plugin_manager.get_all_plugins_info()
-for name, info in plugins_info.items():
-    print(f"Plugin: {name}")
+# Print information about available actions
+for name, info in actions_info.items():
+    print(f"Action: {name}")
     print(f"  Version: {info['version']}")
     print(f"  Description: {info['description']}")
     print(f"  Functions: {len(info['functions'])}")
 
-# Call a specific plugin function
-result = plugin_manager.call_plugin_function(
-    "maya_plugin",           # Plugin name
-    "create_cube",           # Function name
-    size=2.0,                # Function arguments
-    context={"maya": True}   # Context for DCC integration
-)
+# Load a specific action
+result = manager.load_action('/path/to/my_action.py')
+if result.success:
+    print(f"Loaded action: {result.context['action_name']}")
+else:
+    print(f"Failed to load action: {result.error}")
 
-# Get custom plugin paths
-plugin_paths = filesystem.get_plugin_paths()
+# Call a function from an action
+result = manager.call_action_function('my_action', 'create_sphere', radius=2.0)
+if result.success:
+    print(f"Success: {result.message}")
+    print(f"Created object: {result.context['object_name']}")
+else:
+    print(f"Error: {result.error}")
 ```
 
-### Plugin Management
-
-The plugin management system allows you to discover, load, and interact with DCC-specific plugins:
+### Creating a Custom Action
 
 ```python
-from dcc_mcp_core.plugin_manager import PluginManager
+# my_maya_action.py
+__action_name__ = "my_maya_action"
+__action_version__ = "1.0.0"
+__action_description__ = "Custom Maya operations"
+__action_author__ = "Your Name"
 
-# Create a plugin manager for a specific DCC
-manager = PluginManager('maya')
+from dcc_mcp_core.models import ActionResultModel
 
-# Discover available plugins
-plugin_paths = manager.discover_plugins()
-print(f"Found {len(plugin_paths)} plugins for Maya")
+def create_sphere(context, radius=1.0, name="sphere"):
+    """Create a sphere in Maya.
 
-# Load all discovered plugins
-plugins_info = manager.load_plugins(plugin_paths)
-print(f"Loaded plugins: {list(plugins_info.keys())}")
+    Args:
+        context: The DCC context object
+        radius: The radius of the sphere
+        name: The name of the sphere
 
-# Get structured information about plugins (AI-friendly format)
-plugins_info = manager.get_plugins_info()
+    Returns:
+        ActionResultModel with the result information
+    """
+    try:
+        # Execute Maya command through the context
+        sphere_name = context.cmds.sphere(radius=radius, name=name)[0]
 
-# Call a function from a specific plugin
-result = manager.call_plugin_function('maya_scene_tools', 'create_primitive',
-                                    context=context, primitive_type="cube", size=2.0)
+        return ActionResultModel(
+            success=True,
+            message=f"Successfully created sphere '{sphere_name}'",
+            prompt="You can now modify the sphere's properties or create more objects",
+            context={
+                'object_name': sphere_name,
+                'object_type': 'sphere',
+                'properties': {'radius': radius}
+            }
+        )
+    except Exception as e:
+        return ActionResultModel(
+            success=False,
+            message="Failed to create sphere",
+            error=str(e)
+        )
 ```
 
-### Creating Custom Plugins
+## Contributing
 
-Create a Python file with the following structure to make it discoverable by the plugin system:
-
-```python
-# my_maya_plugin.py
-
-# Plugin metadata
-__plugin_name__ = "My Maya Plugin"
-__plugin_version__ = "1.0.0"
-__plugin_description__ = "A custom plugin for Maya"
-__plugin_author__ = "Your Name"
-__plugin_requires__ = ["maya"]
-
-# Using decorators to simplify plugin function development
-from functools import wraps
-
-def maya_tool(func):
-    """Mark a function as a Maya tool, automatically handling the context parameter."""
-    @wraps(func)
-    def wrapper(context, *args, **kwargs):
-        # Extract Maya client from context
-        maya_client = context.get("maya_client")
-        if not maya_client:
-            return {"error": "Maya client not found"}
-
-        # Call the original function
-        try:
-            return func(context, *args, **kwargs)
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
-    return wrapper
-
-# Plugin functions
-@maya_tool
-def create_cube(context, size=1.0, position=None):
-    """Create a cube in Maya."""
-    cmds = context.get("maya_client").cmds
-
-    if position is None:
-        position = [0, 0, 0]
-
-    # Create the cube
-    cube = cmds.polyCube(w=size, h=size, d=size)[0]
-    cmds.move(position[0], position[1], position[2], cube)
-
-    return {
-        "status": "success",
-        "result": {
-            "name": cube,
-            "type": "cube",
-            "size": size,
-            "position": position
-        }
-    }
-```
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the LICENSE file for details.
