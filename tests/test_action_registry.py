@@ -84,18 +84,17 @@ class MayaAction(Action):
 
 @pytest.fixture
 def clean_registry():
-    """Fixture to provide a clean ActionRegistry for each test."""
-    # Save the original actions dictionary
+    """测试用的 ActionRegistry 实例。"""
+    # 重置 ActionRegistry 单例实例
+    ActionRegistry._reset_instance()
+    
+    # 获取新的实例
     registry = ActionRegistry()
-    original_actions = registry._actions.copy()
-
-    # Clear the registry for the test
-    registry._actions = {}
-
+    
     yield registry
-
-    # Restore the original actions after the test
-    registry._actions = original_actions
+    
+    # 测试结束后再次重置单例实例
+    ActionRegistry._reset_instance()
 
 
 def test_action_registry_singleton():
@@ -253,3 +252,185 @@ def test_action_registry_discover_actions(clean_registry, setup_test_package):
     subpackage = next(a for a in actions if a["name"] == "subpackage_action")
     assert subpackage["description"] == "Action in a subpackage"
     assert subpackage["dcc"] == "maya"
+
+
+def test_action_registry_dcc_specific_registry(clean_registry):
+    """测试 DCC 特定的动作注册表。"""
+    registry = clean_registry
+
+    # 注册测试动作
+    registry.register(TestAction1)  # dcc = "test"
+    registry.register(TestAction2)  # dcc = "maya"
+    registry.register(TestAction)   # dcc = "test"
+    registry.register(MayaAction)   # dcc = "maya"
+
+    # 检查主注册表
+    assert len(registry._actions) == 4
+    assert "test_action1" in registry._actions
+    assert "test_action2" in registry._actions
+    assert "test_action" in registry._actions
+    assert "maya_action" in registry._actions
+
+    # 检查 DCC 特定注册表
+    assert len(registry._dcc_actions) == 2
+    assert "test" in registry._dcc_actions
+    assert "maya" in registry._dcc_actions
+    
+    # 检查 test DCC 注册表
+    assert len(registry._dcc_actions["test"]) == 2
+    assert "test_action1" in registry._dcc_actions["test"]
+    assert "test_action" in registry._dcc_actions["test"]
+    
+    # 检查 maya DCC 注册表
+    assert len(registry._dcc_actions["maya"]) == 2
+    assert "test_action2" in registry._dcc_actions["maya"]
+    assert "maya_action" in registry._dcc_actions["maya"]
+
+
+def test_action_registry_get_action_with_dcc(clean_registry):
+    """测试按 DCC 名称获取动作。"""
+    registry = clean_registry
+
+    # 注册测试动作
+    registry.register(TestAction1)  # dcc = "test"
+    registry.register(TestAction2)  # dcc = "maya"
+
+    # 不指定 DCC 名称
+    action1 = registry.get_action("test_action1")
+    assert action1 is TestAction1
+    
+    action2 = registry.get_action("test_action2")
+    assert action2 is TestAction2
+
+    # 指定正确的 DCC 名称
+    action1_test = registry.get_action("test_action1", dcc_name="test")
+    assert action1_test is TestAction1
+    
+    action2_maya = registry.get_action("test_action2", dcc_name="maya")
+    assert action2_maya is TestAction2
+
+    # 指定错误的 DCC 名称，应该返回 None
+    action1_maya = registry.get_action("test_action1", dcc_name="maya")
+    assert action1_maya is None
+    
+    action2_test = registry.get_action("test_action2", dcc_name="test")
+    assert action2_test is None
+
+    # 指定不存在的 DCC 名称，应该返回主注册表中的动作
+    action1_houdini = registry.get_action("test_action1", dcc_name="houdini")
+    assert action1_houdini is TestAction1
+
+
+def test_action_registry_get_actions_by_dcc(clean_registry):
+    """测试获取特定 DCC 的所有动作。"""
+    registry = clean_registry
+
+    # 注册测试动作
+    registry.register(TestAction1)  # dcc = "test"
+    registry.register(TestAction2)  # dcc = "maya"
+    registry.register(TestAction)   # dcc = "test"
+    registry.register(MayaAction)   # dcc = "maya"
+
+    # 获取特定 DCC 的所有动作
+    test_actions = registry.get_actions_by_dcc("test")
+    assert len(test_actions) == 2
+    assert "test_action1" in test_actions
+    assert "test_action" in test_actions
+    assert test_actions["test_action1"] is TestAction1
+    assert test_actions["test_action"] is TestAction
+
+    maya_actions = registry.get_actions_by_dcc("maya")
+    assert len(maya_actions) == 2
+    assert "test_action2" in maya_actions
+    assert "maya_action" in maya_actions
+    assert maya_actions["test_action2"] is TestAction2
+    assert maya_actions["maya_action"] is MayaAction
+
+    # 获取不存在的 DCC 的动作
+    houdini_actions = registry.get_actions_by_dcc("houdini")
+    assert len(houdini_actions) == 0
+
+
+def test_action_registry_get_all_dccs(clean_registry):
+    """测试获取所有 DCC 列表。"""
+    registry = clean_registry
+
+    # 初始状态应该没有 DCC
+    assert len(registry.get_all_dccs()) == 0
+
+    # 注册测试动作
+    registry.register(TestAction1)  # dcc = "test"
+    registry.register(TestAction2)  # dcc = "maya"
+
+    # 检查 DCC 列表
+    dccs = registry.get_all_dccs()
+    assert len(dccs) == 2
+    assert "test" in dccs
+    assert "maya" in dccs
+
+    # 注册更多动作
+    registry.register(TestAction)   # dcc = "test", 已存在
+    registry.register(MayaAction)   # dcc = "maya", 已存在
+
+    # DCC 列表应该不变
+    dccs = registry.get_all_dccs()
+    assert len(dccs) == 2
+    assert "test" in dccs
+    assert "maya" in dccs
+
+
+@pytest.mark.skipif(os.environ.get("CI") == "true", reason="Skip in CI environment")
+def test_action_registry_discover_actions_return_value(clean_registry, setup_test_package):
+    """测试动作发现机制返回值。"""
+    registry = clean_registry
+    pkg_name = setup_test_package
+
+    # 发现动作并获取返回值
+    discovered_actions = registry.discover_actions(pkg_name)
+
+    # 检查返回值
+    assert len(discovered_actions) == 2
+    assert any(a.__name__ == "DiscoveredAction" for a in discovered_actions)
+    assert any(a.__name__ == "SubpackageAction" for a in discovered_actions)
+
+    # 检查注册表
+    assert "discovered_action" in registry._actions
+    assert "subpackage_action" in registry._actions
+
+    # 检查 DCC 特定注册表
+    assert "test" in registry._dcc_actions
+    assert "maya" in registry._dcc_actions
+    assert "discovered_action" in registry._dcc_actions["test"]
+    assert "subpackage_action" in registry._dcc_actions["maya"]
+
+
+@pytest.mark.skipif(os.environ.get("CI") == "true", reason="Skip in CI environment")
+def test_action_registry_discover_actions_with_dcc(clean_registry, setup_test_package):
+    """测试指定 DCC 名称的动作发现机制。"""
+    registry = clean_registry
+    pkg_name = setup_test_package
+
+    # 发现动作并指定 DCC 名称
+    discovered_actions = registry.discover_actions(pkg_name, dcc_name="custom_dcc")
+
+    # 检查返回值
+    assert len(discovered_actions) == 2
+    assert any(a.__name__ == "DiscoveredAction" for a in discovered_actions)
+    assert any(a.__name__ == "SubpackageAction" for a in discovered_actions)
+    
+    # 检查注册表
+    assert "discovered_action" in registry._actions
+    assert "subpackage_action" in registry._actions
+
+    # 检查 DCC 特定注册表
+    assert "test" in registry._dcc_actions  # DiscoveredAction 已经有 dcc = "test"
+    assert "maya" in registry._dcc_actions  # SubpackageAction 已经有 dcc = "maya"
+    
+    # 检查动作的 DCC 名称没有被覆盖
+    discovered_action = registry._actions.get("discovered_action")
+    assert discovered_action is not None
+    assert discovered_action.dcc == "test"
+    
+    subpackage_action = registry._actions.get("subpackage_action")
+    assert subpackage_action is not None
+    assert subpackage_action.dcc == "maya"
