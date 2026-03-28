@@ -43,7 +43,7 @@ Repository = "https://github.com/loonghao/dcc-mcp-core"
 Issues = "https://github.com/loonghao/dcc-mcp-core/issues"
 
 [tool.poetry.group.dev.dependencies]
-pyfakefs = "^5.8.0"
+pyfakefs = "^6.0.0"
 pytest = "^7.0.0"
 pytest-cov = "^4.0.0"
 
