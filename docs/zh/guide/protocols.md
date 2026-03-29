@@ -1,55 +1,73 @@
 # MCP 协议
 
-DCC-MCP-Core 提供完整的 MCP（模型上下文协议）抽象层。
+DCC-MCP-Core 提供 MCP（模型上下文协议）类型定义，作为 Rust 支持的 Python 类。遵循 [MCP 规范](https://modelcontextprotocol.io/specification/2025-11-25)。
 
-## 类型定义
+## 工具定义
 
 ```python
-from dcc_mcp_core.protocols import ToolDefinition, ResourceDefinition, PromptDefinition
+from dcc_mcp_core import ToolDefinition, ToolAnnotations
 
 tool = ToolDefinition(
     name="create_sphere",
-    description="创建球体",
-    inputSchema={"type": "object", "properties": {"radius": {"type": "number"}}},
+    description="在场景中创建球体",
+    input_schema='{"type": "object", "properties": {"radius": {"type": "number"}}}',
+    output_schema='{"type": "object", "properties": {"name": {"type": "string"}}}',
+)
+
+annotations = ToolAnnotations(
+    title="创建球体",
+    read_only_hint=False,
+    destructive_hint=False,
+    idempotent_hint=True,
 )
 ```
 
-## Resource 基类
+## 资源定义
 
 ```python
-from dcc_mcp_core.protocols import Resource
+from dcc_mcp_core import ResourceDefinition, ResourceTemplateDefinition
 
-class SceneObjectsResource(Resource):
-    uri = "scene://objects"
-    name = "Scene Objects"
-    description = "当前场景中的所有对象"
-    mime_type = "application/json"
-    dcc = "maya"
+resource = ResourceDefinition(
+    uri="scene://objects",
+    name="场景对象",
+    description="当前场景中的所有对象",
+    mime_type="application/json",
+)
 
-    def read(self, **params) -> str:
-        import json
-        return json.dumps(self.context["cmds"].ls(dag=True))
+template = ResourceTemplateDefinition(
+    uri_template="scene://objects/{category}/{name}",
+    name="按类别获取对象",
+    description="按类别筛选对象",
+    mime_type="application/json",
+)
 ```
 
-## MCPAdapter
+## 提示词定义
 
 ```python
-from dcc_mcp_core.protocols import MCPAdapter
+from dcc_mcp_core import PromptDefinition, PromptArgument
 
-tool_def = MCPAdapter.action_to_tool(CreateSphereAction)
-resource_def = MCPAdapter.resource_to_definition(SceneObjectsResource)
+prompt = PromptDefinition(
+    name="model_review",
+    description="审查 3D 模型质量",
+)
+
+arg = PromptArgument(
+    name="object_name",
+    description="要审查的对象名称",
+    required=True,
+)
 ```
 
-## Server Protocol
+## 类型总览
 
-```python
-from dcc_mcp_core.protocols import MCPServerProtocol
+| 类型 | 说明 | 主要字段 |
+|------|------|---------|
+| `ToolDefinition` | MCP 工具定义 | `name`, `description`, `input_schema`, `output_schema` |
+| `ToolAnnotations` | 工具行为提示 | `title`, `read_only_hint`, `destructive_hint`, `idempotent_hint`, `open_world_hint` |
+| `ResourceDefinition` | MCP 资源 | `uri`, `name`, `description`, `mime_type` |
+| `ResourceTemplateDefinition` | 参数化资源 | `uri_template`, `name`, `description`, `mime_type` |
+| `PromptArgument` | 提示词参数 | `name`, `description`, `required` |
+| `PromptDefinition` | MCP 提示词 | `name`, `description` |
 
-class MyMCPServer:  # 实现 MCPServerProtocol
-    async def list_tools(self): ...
-    async def call_tool(self, name, arguments): ...
-    async def list_resources(self): ...
-    async def read_resource(self, uri): ...
-    async def list_prompts(self): ...
-    async def get_prompt(self, name, arguments=None): ...
-```
+所有类型支持属性读写，由 Rust 结构体和 serde 序列化支撑。

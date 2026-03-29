@@ -1,31 +1,35 @@
 # Actions API
 
-详见 [英文 API 文档](/api/actions) 获取完整参考。
-
-## Action 基类
-
-- `setup(**kwargs)` — 验证输入
-- `process()` — 同步执行
-- `process_async()` — 异步执行
-- `_execute()` — **必须实现**
-
-## ActionManager
-
-```python
-from dcc_mcp_core import create_action_manager, get_action_manager
-
-manager = create_action_manager("maya")
-result = manager.call_action("create_sphere", radius=2.0)
-info = manager.get_actions_info()
-names = manager.list_available_actions()
-```
-
 ## ActionRegistry
 
+线程安全的动作注册表，使用 Rust DashMap 实现。
+
 ```python
-from dcc_mcp_core.actions.registry import ActionRegistry
+from dcc_mcp_core import ActionRegistry
 
 registry = ActionRegistry()
-registry.register(MyAction)
-action_cls = registry.get_action("my_action", dcc_name="maya")
+```
+
+### 方法
+
+| 方法 | 返回值 | 说明 |
+|------|--------|------|
+| `register(name, ...)` | `bool` | 注册动作 |
+| `get_action(name, dcc_name=None)` | `Optional[dict]` | 获取动作元数据 |
+| `list_actions(dcc_name=None)` | `List[dict]` | 列出所有动作 |
+| `list_actions_for_dcc(dcc_name)` | `List[str]` | 列出指定 DCC 的动作名称 |
+| `get_all_dccs()` | `List[str]` | 列出所有已注册 DCC |
+| `reset()` | `None` | 清除所有注册 |
+| `len(registry)` | `int` | 已注册动作数量 |
+
+### 注册示例
+
+```python
+registry.register(
+    name="create_sphere",
+    description="创建球体",
+    dcc="maya",
+    tags=["geometry"],
+    input_schema='{"type": "object", "properties": {}}',
+)
 ```
