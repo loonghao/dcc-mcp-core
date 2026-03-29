@@ -264,6 +264,36 @@ class TestVersion:
         assert isinstance(dcc_mcp_core.__version__, str)
         assert dcc_mcp_core.__version__ != ""
 
+    def test_version_fallback_on_exception(self):
+        import importlib
+        import sys
+        import types
+
+        # Create a fake _core module without __version__
+        fake_core = types.ModuleType("dcc_mcp_core._core")
+        # Copy all attributes except __version__
+        for attr in dir(dcc_mcp_core._core):
+            if attr == "__version__":
+                continue
+            try:
+                setattr(fake_core, attr, getattr(dcc_mcp_core._core, attr))
+            except (AttributeError, TypeError):
+                pass
+
+        original_core = sys.modules["dcc_mcp_core._core"]
+        original_pkg = sys.modules["dcc_mcp_core"]
+        try:
+            sys.modules["dcc_mcp_core._core"] = fake_core
+            # Remove cached dcc_mcp_core to force fresh import with fake _core
+            del sys.modules["dcc_mcp_core"]
+            import dcc_mcp_core as reimported
+            assert reimported.__version__ == "0.0.0-dev"
+        finally:
+            # Restore original modules
+            sys.modules["dcc_mcp_core._core"] = original_core
+            sys.modules["dcc_mcp_core"] = original_pkg
+            importlib.reload(dcc_mcp_core)
+
     def test_all_exports(self):
         assert hasattr(dcc_mcp_core, "__all__")
         for name in dcc_mcp_core.__all__:
