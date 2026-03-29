@@ -1,105 +1,120 @@
-# Actions
+# Actions & Registry
 
-Actions are the core building blocks of DCC-MCP-Core. Each action represents a discrete operation that can be performed in a DCC application.
+The **ActionRegistry** is the central component for managing action metadata in DCC-MCP-Core. It provides thread-safe registration, lookup, and listing of actions.
 
-## Action Base Class
+## ActionRegistry
 
-Actions inherit from the `Action` base class, providing a standardized structure with Pydantic models:
-
-```python
-from dcc_mcp_core.actions.base import Action
-from dcc_mcp_core.models import ActionResultModel
-from pydantic import Field, field_validator, model_validator
-from typing import List, Optional
-
-class CreateSphereAction(Action):
-    # Metadata as class attributes
-    name = "create_sphere"
-    description = "Creates a sphere in the scene"
-    tags = ["geometry", "creation"]
-    dcc = "maya"
-    order = 0  # Execution priority
-
-    # Input parameters model with validation
-    class InputModel(Action.InputModel):
-        radius: float = Field(default=1.0, description="Radius of the sphere")
-        position: List[float] = Field(default=[0, 0, 0], description="Position")
-        name: Optional[str] = Field(default=None, description="Name of the sphere")
-
-        @field_validator('radius')
-        def validate_radius(cls, v):
-            if v <= 0:
-                raise ValueError("Radius must be positive")
-            return v
-
-        @model_validator(mode='after')
-        def validate_model(self):
-            if self.name and self.position == [0, 0, 0]:
-                raise ValueError("Position must not be origin when name is specified")
-            return self
-
-    # Output data model
-    class OutputModel(Action.OutputModel):
-        object_name: str = Field(description="Name of the created object")
-        position: List[float] = Field(description="Final position")
-
-    def _execute(self) -> None:
-        radius = self.input.radius
-        position = self.input.position
-        name = self.input.name or f"sphere_{radius}"
-
-        cmds = self.context.get("cmds")
-        sphere = cmds.polySphere(r=radius, n=name)[0]
-        cmds.move(*position, sphere)
-
-        self.output = self.OutputModel(
-            object_name=sphere,
-            position=position,
-            prompt="You can now modify the sphere's attributes or add materials"
-        )
-```
-
-## Class Attributes
-
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `name` | `str` | Action name (used for registration and lookup) |
-| `description` | `str` | What this action does |
-| `tags` | `List[str]` | Classification tags |
-| `dcc` | `str` | Target DCC (`"maya"`, `"blender"`, `"houdini"`, etc.) |
-| `order` | `int` | Execution priority (lower = first) |
-| `category` | `str` | Organization category |
-| `abstract` | `bool` | If `True`, not registered |
-
-## Lifecycle
-
-```
-__init__(context) → setup(**kwargs) → process() → ActionResultModel
-```
-
-1. **`__init__(context)`** — Initialize with DCC context
-2. **`setup(**kwargs)`** — Validate input, chainable
-3. **`process()`** — Sync execute with error handling
-4. **`process_async()`** — Async execute (thread pool by default)
-
-## Key Methods
-
-| Method | Description |
-|--------|-------------|
-| `setup(**kwargs)` | Validate input, returns self (chainable) |
-| `validate_input(**kwargs)` | Pydantic validation |
-| `process()` | Sync execute → `ActionResultModel` |
-| `process_async()` | Async execute → `ActionResultModel` |
-| `_execute()` | **Must implement** — core logic |
-| `_execute_async()` | Override for native async |
-
-## Async Support
-
-By default, `_execute_async()` runs `_execute()` in a thread pool. Override for native async:
+The `ActionRegistry` is implemented in Rust using `DashMap` for lock-free concurrent reads. Unlike a singleton, each registry instance is independent — eliminating cross-DCC pollution.
 
 ```python
-async def _execute_async(self) -> None:
-    import asyncio
-    await asyncio.sleep(0.1)  # Simulate async work
-    # ... async operations
+from dcc_mcp_core import ActionRegistry
+
+# Create a new registry
+registry = ActionRegistry()
+
+# Register an action
+registry.register(
+    name="create_sphere",
+    description="Creates a sphere in the scene",
+    category="geometry",
+    tags=["geometry", "creation"],
+    dcc="maya",
+    version="1.0.0",
+    input_schema='{"type": "object", "properties": {"radius": {"type": "number"}}}',
+    output_schema='{"type": "object", "properties": {"name": {"type": "string"}}}',
+    source_file="/path/to/action.py",
+)
+```
+
+## Registration Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | `str` | — | Action name (used for lookup) |
+| `description` | `str` | `""` | What this action does |
+| `category` | `str` | `""` | Organization category |
+| `tags` | `List[str]` | `[]` | Classification tags |
+| `dcc` | `str` | `"python"` | Target DCC application |
+| `version` | `str` | `"1.0.0"` | Action version |
+| `input_schema` | `Optional[str]` | `None` | JSON Schema string for input |
+| `output_schema` | `Optional[str]` | `None` | JSON Schema string for output |
+| `source_file` | `Optional[str]` | `None` | Source file path |
+
+## Querying Actions
+
+```python
+# Get action metadata (returns dict or None)
+meta = registry.get_action("create_sphere")
+meta = registry.get_action("create_sphere", dcc_name="maya")
+
+# List all action names for a DCC
+names = registry.list_actions_for_dcc("maya")  # ["create_sphere", ...]
+
+# List all actions with full metadata
+all_actions = registry.list_actions()               # All actions
+maya_actions = registry.list_actions(dcc_name="maya")  # Maya-specific
+
+# Get all registered DCC names
+dccs = registry.get_all_dccs()  # ["maya", "blender", ...]
+
+# Registry info
+print(len(registry))  # Number of registered actions
+```
+
+## Action Metadata Dict
+
+When retrieved via `get_action()` or `list_actions()`, each action returns a dict with:
+
+```python
+{
+    "name": "create_sphere",
+    "internal_name": "create_sphere",
+    "description": "Creates a sphere in the scene",
+    "category": "geometry",
+    "tags": ["geometry", "creation"],
+    "dcc": "maya",
+    "version": "1.0.0",
+    "input_schema": '{"type": "object", ...}',   # JSON string
+    "output_schema": '{"type": "object", ...}',   # JSON string
+    "source_file": "/path/to/action.py",
+}
+```
+
+## ActionResultModel
+
+All action executions should return an `ActionResultModel`:
+
+```python
+from dcc_mcp_core import ActionResultModel, success_result, error_result
+
+# Direct construction
+result = ActionResultModel(
+    success=True,
+    message="Created sphere",
+    prompt="You can now modify the sphere",
+    context={"object_name": "sphere1"},
+)
+
+# Factory functions (recommended)
+result = success_result("Created sphere", prompt="Modify next", object_name="sphere1")
+error = error_result("Failed", "File not found", prompt="Check path")
+
+# Access fields
+print(result.success)    # True
+print(result.message)    # "Created sphere"
+print(result.prompt)     # "You can now modify the sphere"
+print(result.context)    # {"object_name": "sphere1"}
+
+# Create modified copies
+with_err = result.with_error("Something went wrong")
+with_ctx = result.with_context(extra_data="value")
+
+# Serialize
+d = result.to_dict()  # {"success": True, "message": ..., ...}
+```
+
+## Resetting the Registry
+
+```python
+registry.reset()  # Clear all registered actions
 ```

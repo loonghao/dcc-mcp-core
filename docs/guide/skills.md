@@ -9,10 +9,13 @@ The Skills system allows you to register any script (Python, MEL, MaxScript, BAT
 ```
 maya-geometry/
 ├── SKILL.md
-└── scripts/
-    ├── create_sphere.py
-    ├── batch_rename.mel
-    └── export_fbx.bat
+├── scripts/
+│   ├── create_sphere.py
+│   ├── batch_rename.mel
+│   └── export_fbx.bat
+└── metadata/          # Optional
+    ├── depends.md     # Dependency declarations
+    └── help.md        # Additional documentation
 ```
 
 ### 2. Write the SKILL.md
@@ -24,6 +27,7 @@ description: "Maya geometry creation and modification tools"
 tools: ["Bash", "Read"]
 tags: ["maya", "geometry"]
 dcc: maya
+version: "1.0.0"
 ---
 # Maya Geometry Skill
 
@@ -43,18 +47,28 @@ set DCC_MCP_SKILL_PATHS=C:\path\to\my-skills
 export DCC_MCP_SKILL_PATHS="/path/skills1:/path/skills2"
 ```
 
-### 4. Use It
-
-Scripts are auto-discovered and registered as MCP tools:
+### 4. Scan and Load
 
 ```python
-from dcc_mcp_core import create_action_manager
+from dcc_mcp_core import SkillScanner, scan_skill_paths, parse_skill_md
 
-manager = create_action_manager("maya")
-# Skills from DCC_MCP_SKILL_PATHS are automatically loaded
+# Option 1: Use SkillScanner for full control
+scanner = SkillScanner()
+skill_dirs = scanner.scan(
+    extra_paths=["/my/skills"],
+    dcc_name="maya",
+    force_refresh=False,
+)
 
-# Call a skill action
-result = manager.call_action("maya_geometry__create_sphere", radius=2.0)
+# Option 2: Convenience function
+skill_dirs = scan_skill_paths(extra_paths=["/my/skills"], dcc_name="maya")
+
+# Option 3: Parse a specific skill directory
+metadata = parse_skill_md("/path/to/maya-geometry")
+if metadata:
+    print(f"Skill: {metadata.name}")
+    print(f"Scripts: {metadata.scripts}")
+    print(f"Tags: {metadata.tags}")
 ```
 
 ## Supported Script Types
@@ -68,29 +82,47 @@ result = manager.call_action("maya_geometry__create_sphere", radius=2.0)
 | `.sh`, `.bash` | Shell | `bash` |
 | `.ps1` | PowerShell | `powershell -File` |
 | `.js`, `.jsx` | JavaScript | `node` |
+| `.vbs` | VBScript | `cscript` |
 
 ## How It Works
 
-1. **SkillScanner** scans directories for `SKILL.md` files
-2. **SkillLoader** parses the YAML frontmatter and enumerates `scripts/`
-3. **ScriptAction factory** generates Action subclasses for each script
-4. Actions are registered in the existing **ActionRegistry**
-5. MCP Server layer can subscribe to `skill.loaded` events via **EventBus**
+1. **SkillScanner** scans directories for `SKILL.md` files (with mtime-based caching)
+2. **parse_skill_md** parses the YAML frontmatter and enumerates `scripts/` directory
+3. **metadata/** directory is discovered for additional files (depends.md, help.md, etc.)
+4. Dependencies declared in `metadata/depends.md` are merged into the metadata
 
-## Programmatic Usage
+### Search Path Priority
+
+1. **Extra paths** passed to `scan()` (highest priority)
+2. **Environment variable** `DCC_MCP_SKILL_PATHS`
+3. **Platform skills directory** (`get_skills_dir(dcc_name)`)
+4. **Global skills directory** (`get_skills_dir(None)`)
+
+## SkillMetadata Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | `str` | — | Unique identifier |
+| `description` | `str` | `""` | Human-readable description |
+| `tools` | `List[str]` | `[]` | Required tool permissions |
+| `dcc` | `str` | `"python"` | Target DCC application |
+| `tags` | `List[str]` | `[]` | Classification tags |
+| `scripts` | `List[str]` | `[]` | Discovered script file paths |
+| `skill_path` | `str` | `""` | Absolute path to skill directory |
+| `version` | `str` | `"1.0.0"` | Skill version |
+| `depends` | `List[str]` | `[]` | Dependency skill names |
+| `metadata_files` | `List[str]` | `[]` | Files in metadata/ directory |
+
+## Caching
+
+`SkillScanner` caches results based on SKILL.md file modification times. Use `force_refresh=True` to bypass the cache:
 
 ```python
-from dcc_mcp_core.skills import SkillScanner, load_skill, scan_skill_paths
-from dcc_mcp_core.actions.registry import ActionRegistry
-
-# Scan for skills
 scanner = SkillScanner()
-skill_dirs = scanner.scan(extra_paths=["/my/skills"], dcc_name="maya")
-
-# Load a specific skill
-registry = ActionRegistry()
-actions = load_skill("/path/to/maya-geometry", registry=registry, dcc_name="maya")
-
-# Convenience function
-dirs = scan_skill_paths(extra_paths=["/my/skills"])
+# Normal scan (uses cache)
+dirs = scanner.scan()
+# Force re-scan
+dirs = scanner.scan(force_refresh=True)
+# Clear cache entirely
+scanner.clear_cache()
 ```

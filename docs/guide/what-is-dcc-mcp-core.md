@@ -1,6 +1,8 @@
 # What is DCC-MCP-Core?
 
-DCC-MCP-Core is an **action management system** designed for Digital Content Creation (DCC) applications, providing a unified interface that allows AI to interact with various DCC software such as Maya, Blender, Houdini, and more.
+DCC-MCP-Core is a **foundational library** for the Digital Content Creation (DCC) Model Context Protocol (MCP) ecosystem, providing a unified interface that allows AI to interact with various DCC software such as Maya, Blender, Houdini, and more.
+
+The core is written in **Rust** and exposed to Python via **PyO3**, delivering zero-dependency performance with a clean Python API.
 
 ## Core Workflow
 
@@ -31,46 +33,44 @@ flowchart LR
 
 ## Key Features
 
-- **Class-Based Actions** — Define operations using Pydantic models with strong type checking and input validation
-- **ActionManager** — Lifecycle coordinator for action discovery, loading, and execution
-- **Middleware System** — Chain-of-responsibility pattern for logging, performance monitoring, and more
-- **Event System** — Publish/subscribe EventBus for action lifecycle events
+- **Rust-Powered Core** — All logic implemented in Rust via PyO3 for maximum performance
+- **Zero Python Dependencies** — Python 3.8+ with no third-party runtime dependencies
+- **ActionRegistry** — Thread-safe action registration and lookup using DashMap
+- **EventBus** — Publish/subscribe event system for decoupled communication
 - **Skills System** — Zero-code registration of scripts as MCP tools via SKILL.md
-- **MCP Protocol Layer** — Full protocol abstractions for Tools, Resources, and Prompts
-- **Zero Dependencies** — Python 3.8+ with no third-party Python dependencies
-- **Rust Core** — Performance-critical modules written in Rust via PyO3
+- **MCP Protocol Types** — Full MCP type definitions (Tools, Resources, Prompts)
+- **Type Wrappers** — RPyC-compatible type wrappers for safe remote calls
+- **Platform Utilities** — Cross-platform filesystem paths, logging, and constants
 
-## Project Structure
+## Architecture
+
+DCC-MCP-Core uses a Rust workspace with 5 sub-crates, compiled into a single Python extension module `dcc_mcp_core._core`:
 
 ```
-dcc_mcp_core/
-├── __init__.py              # Public API exports
-├── models.py                # ActionResultModel, SkillMetadata
-├── actions/
-│   ├── base.py              # Action base class
-│   ├── manager.py           # ActionManager
-│   ├── registry.py          # ActionRegistry (singleton)
-│   ├── middleware.py         # Middleware system
-│   ├── events.py            # EventBus
-│   ├── function_adapter.py  # Action-to-function adapters
-│   └── generator.py         # Action template generation
-├── skills/
-│   ├── scanner.py           # SkillScanner
-│   ├── loader.py            # SKILL.md parser
-│   └── script_action.py     # ScriptAction factory
-├── protocols/
-│   ├── types.py             # MCP type definitions
-│   ├── base.py              # Resource, Prompt ABCs
-│   ├── server.py            # MCPServerProtocol
-│   └── adapter.py           # MCPAdapter
-└── utils/
-    ├── filesystem.py         # Platform dirs, env paths
-    ├── module_loader.py      # Dynamic module loading
-    ├── decorators.py         # error_handler, with_context
-    ├── dependency_injector.py
-    ├── template.py           # Jinja2 rendering
-    ├── type_wrappers.py      # RPyC-safe type wrappers
-    └── result_factory.py     # Factory functions
+dcc-mcp-core/                      # Rust workspace root
+├── src/lib.rs                     # PyO3 module entry point → _core.pyd/.so
+├── python/dcc_mcp_core/
+│   ├── __init__.py                # Python re-exports from _core
+│   └── py.typed                   # PEP 561 marker
+└── crates/
+    ├── dcc-mcp-models/            # ActionResultModel, SkillMetadata
+    ├── dcc-mcp-actions/           # ActionRegistry, EventBus
+    ├── dcc-mcp-protocols/         # MCP type definitions
+    ├── dcc-mcp-skills/            # SKILL.md scanning and loading
+    └── dcc-mcp-utils/             # Filesystem, constants, type wrappers, logging
+```
+
+All Python imports come from the top-level `dcc_mcp_core` package:
+
+```python
+from dcc_mcp_core import (
+    ActionResultModel, ActionRegistry, EventBus,
+    SkillScanner, SkillMetadata,
+    ToolDefinition, ToolAnnotations,
+    ResourceDefinition, PromptDefinition,
+    success_result, error_result,
+    get_config_dir, get_actions_dir,
+)
 ```
 
 ## Related Projects

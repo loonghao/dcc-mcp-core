@@ -1,27 +1,47 @@
 # Events API
 
-`dcc_mcp_core.actions.events`
-
 ## EventBus
 
-Global instance: `event_bus`
+`dcc_mcp_core.EventBus` — Thread-safe publish/subscribe event system, implemented in Rust using DashMap and parking_lot.
+
+```python
+from dcc_mcp_core import EventBus
+```
+
+### Constructor
+
+```python
+bus = EventBus()
+```
 
 ### Methods
 
-- `subscribe(event_name: str, handler: Callable)` — Subscribe to an event
-- `unsubscribe(event_name: str, handler: Callable)` — Unsubscribe
-- `publish(event_name: str, data: dict)` — Publish an event
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `subscribe(event_name, callback)` | `int` | Subscribe to event, returns subscriber ID |
+| `unsubscribe(event_name, subscriber_id)` | `bool` | Unsubscribe by ID, returns True if found |
+| `publish(event_name, **kwargs)` | `None` | Publish event, calling all subscribers |
 
-## Built-in Events
+### Usage
 
-| Event | Published By | Data |
-|-------|-------------|------|
-| `action_manager.created` | ActionManager init | `{"manager": ...}` |
-| `action_manager.before_discover_path` | `discover_actions_from_path` | `{"path": ...}` |
-| `action_manager.after_discover_path` | `discover_actions_from_path` | `{"path": ..., "actions": ...}` |
-| `action_manager.before_refresh` | `refresh_actions` | `{"force": ...}` |
-| `action_manager.after_refresh` | `refresh_actions` | `{"actions_count": ...}` |
-| `action.before_execute.{name}` | `call_action` | `{"action_name": ..., "kwargs": ...}` |
-| `action.after_execute.{name}` | `call_action` | `{"action_name": ..., "result": ...}` |
-| `action.error.{name}` | `call_action` | `{"action_name": ..., "error": ...}` |
-| `skill.loaded` | skill loader | `{"skill_name": ..., "actions": ...}` |
+```python
+from dcc_mcp_core import EventBus
+
+bus = EventBus()
+
+def on_action_done(**kwargs):
+    print(f"Action: {kwargs.get('action_name')}, success: {kwargs.get('success')}")
+
+# Subscribe
+sub_id = bus.subscribe("action.completed", on_action_done)
+
+# Publish
+bus.publish("action.completed", action_name="create_sphere", success=True)
+
+# Unsubscribe
+bus.unsubscribe("action.completed", sub_id)
+```
+
+### Error Handling
+
+If a subscriber callback raises an exception, it is logged via `tracing::error` but does not stop other subscribers from being called.
