@@ -1,137 +1,95 @@
 # dcc-mcp-core
 
-> Foundational library for the DCC Model Context Protocol (MCP) ecosystem. Provides action management, structured results, middleware, event system, skills/script registration, and MCP protocol adapters for Digital Content Creation applications (Maya, Blender, Houdini, etc.).
+> Foundational library for the DCC Model Context Protocol (MCP) ecosystem. Rust-powered core (PyO3) with zero Python dependencies. Provides action registry, structured results, event system, skills/script registration, MCP protocol types, and platform utilities for Digital Content Creation applications (Maya, Blender, Houdini, etc.).
 
 ## Quick Start
 
 ```python
-from dcc_mcp_core import create_action_manager
+from dcc_mcp_core import ActionRegistry, success_result, SkillScanner
 
-manager = create_action_manager("maya")
-result = manager.call_action("create_sphere", radius=2.0)
+# Action registration
+registry = ActionRegistry()
+registry.register(name="create_sphere", description="Creates a sphere", dcc="maya", tags=["geometry"])
+
+# Structured results
+result = success_result("Created sphere", prompt="Modify next", object_name="sphere1")
 print(result.success, result.message, result.context)
+
+# Skill scanning
+scanner = SkillScanner()
+skills = scanner.scan(extra_paths=["/path/to/skills"], dcc_name="maya")
 ```
 
 ## Installation
 
 - PyPI: `pip install dcc-mcp-core`
-- Source: `git clone https://github.com/loonghao/dcc-mcp-core.git && pip install -e .`
-- Python: >=3.7 (CI tests 3.11+)
-- License: MIT
+- Source: `git clone https://github.com/loonghao/dcc-mcp-core.git && maturin develop --features python-bindings,abi3-py38`
+- Python: >=3.7 (abi3 wheel for 3.8+), Rust >=1.75 (for source builds)
+- License: MIT, Zero Python runtime dependencies
+
+## Architecture
+
+Rust workspace with 5 sub-crates compiled into `dcc_mcp_core._core` Python extension:
+- `dcc-mcp-models`: ActionResultModel, SkillMetadata
+- `dcc-mcp-actions`: ActionRegistry (DashMap), EventBus (pub/sub)
+- `dcc-mcp-protocols`: MCP type definitions (Tools, Resources, Prompts)
+- `dcc-mcp-skills`: SKILL.md scanning and loading
+- `dcc-mcp-utils`: Filesystem, constants, type wrappers, logging
 
 ## Core Concepts
 
-- **Action**: Class-based operation with Pydantic InputModel/OutputModel, validated parameters, structured results
-- **ActionManager**: Lifecycle manager for Actions — discover, load, execute with middleware and events
-- **ActionRegistry**: Singleton registry for Action class discovery and retrieval
-- **ActionResultModel**: Standardized Pydantic model for all action results (success, message, prompt, error, context)
-- **Middleware**: Chain-of-responsibility pattern for cross-cutting concerns (logging, performance)
-- **EventBus**: Publish/subscribe system for action lifecycle events
-- **Skills**: Zero-code script registration (Python, MEL, MaxScript, BAT, Shell) as MCP tools via SKILL.md
-- **MCP Protocols**: Abstract base classes and adapters for MCP Server, Tools, Resources, Prompts
-
-## Key APIs
-
-### Top-level exports (`dcc_mcp_core`)
-- `create_action_manager(dcc_name, ...) -> ActionManager`
-- `get_action_manager(dcc_name, ...) -> ActionManager` (cached singleton)
-- `ActionResultModel` — Pydantic model: success, message, prompt, error, context
-- `success_result(message, prompt=None, **context) -> ActionResultModel`
-- `error_result(message, error, prompt=None, **context) -> ActionResultModel`
-- `from_exception(e, message=None, ...) -> ActionResultModel`
-
-### Actions (`dcc_mcp_core.actions`)
-- `Action` — base class; subclass and implement `_execute()`
-- `Action.InputModel` / `Action.OutputModel` — Pydantic models for validation
-- `ActionManager.call_action(name, **kwargs) -> ActionResultModel`
-- `ActionManager.call_action_async(name, **kwargs) -> ActionResultModel`
-- `ActionManager.get_actions_info() -> ActionResultModel`
-- `ActionRegistry.register(action_class) -> bool`
-- `ActionRegistry.get_action(name, dcc_name=None) -> Optional[Type[Action]]`
-- `ActionRegistry.list_actions(dcc_name=None) -> List[Dict]`
-- `create_function_adapter(action_name, ...) -> Callable`
-- `create_function_adapters(dcc_name=None, ...) -> Dict[str, Callable]`
-
-### Middleware (`dcc_mcp_core.actions.middleware`)
-- `Middleware` — base class with `process(action) -> ActionResultModel`
-- `LoggingMiddleware` — logs execution details and timing
-- `PerformanceMiddleware(threshold=1.0)` — warns on slow actions
-- `MiddlewareChain.add(cls).build() -> Middleware`
-
-### Skills (`dcc_mcp_core.skills`)
-- `SkillScanner.scan(extra_paths=None, dcc_name=None) -> List[str]`
-- `parse_skill_md(skill_dir) -> Optional[SkillMetadata]`
-- `load_skill(skill_dir, registry=None, dcc_name=None) -> List[Type[Action]]`
-- `create_script_action(skill_name, script_path, metadata, dcc_name) -> Type[Action]`
-- Environment variable: `DCC_MCP_SKILL_PATHS`
-
-### MCP Protocols (`dcc_mcp_core.protocols`)
-- `MCPAdapter.action_to_tool(action_class) -> ToolDefinition`
-- `MCPAdapter.resource_to_definition(resource_class) -> ResourceDefinition`
-- `MCPAdapter.prompt_to_definition(prompt_class) -> PromptDefinition`
-- `MCPServerProtocol` — full MCP server interface (Tools + Resources + Prompts)
-- `Resource(ABC)` — abstract base for MCP Resources; implement `read(**params) -> str`
-- `Prompt(ABC)` — abstract base for MCP Prompts; implement `render(**kwargs) -> str`
-
-### Utils (`dcc_mcp_core.utils`)
-- `load_module_from_path(file_path, dependencies=None, dcc_name=None) -> ModuleType`
-- `inject_dependencies(module, dependencies, inject_core_modules=False, dcc_name=None)`
-- `@error_handler` — decorator: wraps return in ActionResultModel, catches exceptions
-- `@with_context()` — decorator: ensures context parameter exists
-- Type wrappers for RPyC: `BooleanWrapper`, `IntWrapper`, `FloatWrapper`, `StringWrapper`
-- `unwrap_parameters(params) -> Dict` / `unwrap_value(value) -> Any`
+- **ActionRegistry**: Thread-safe action metadata registry using DashMap — register, get, list, filter by DCC
+- **ActionResultModel**: Structured result type (success, message, prompt, error, context) with factory functions
+- **EventBus**: Thread-safe publish/subscribe event system with subscriber IDs
+- **Skills**: Zero-code script registration as MCP tools via SKILL.md + scripts/ directory
+- **MCP Protocol Types**: ToolDefinition, ResourceDefinition, PromptDefinition and related types
+- **Type Wrappers**: RPyC-safe BooleanWrapper, IntWrapper, FloatWrapper, StringWrapper
+- **Filesystem**: Cross-platform directory utilities (config, data, log, actions, skills)
 
 ## Documentation
 
-- [README (English)](https://github.com/loonghao/dcc-mcp-core/blob/main/README.md)
-- [README (中文)](https://github.com/loonghao/dcc-mcp-core/blob/main/README_zh.md)
-- [Contributing Guide](https://github.com/loonghao/dcc-mcp-core/blob/main/CONTRIBUTING.md)
-- [Changelog](https://github.com/loonghao/dcc-mcp-core/blob/main/CHANGELOG.md)
-- [Full API Reference](https://github.com/loonghao/dcc-mcp-core/blob/main/llms-full.txt)
+- [Guide: What is DCC-MCP-Core?](https://loonghao.github.io/dcc-mcp-core/guide/what-is-dcc-mcp-core)
+- [Guide: Getting Started](https://loonghao.github.io/dcc-mcp-core/guide/getting-started)
+- [Guide: Actions & Registry](https://loonghao.github.io/dcc-mcp-core/guide/actions)
+- [Guide: Event System](https://loonghao.github.io/dcc-mcp-core/guide/events)
+- [Guide: Skills System](https://loonghao.github.io/dcc-mcp-core/guide/skills)
+- [Guide: MCP Protocols](https://loonghao.github.io/dcc-mcp-core/guide/protocols)
+- [API: Models](https://loonghao.github.io/dcc-mcp-core/api/models)
+- [API: Actions](https://loonghao.github.io/dcc-mcp-core/api/actions)
+- [API: Events](https://loonghao.github.io/dcc-mcp-core/api/events)
+- [API: Skills](https://loonghao.github.io/dcc-mcp-core/api/skills)
+- [API: Protocols](https://loonghao.github.io/dcc-mcp-core/api/protocols)
+- [API: Utilities](https://loonghao.github.io/dcc-mcp-core/api/utilities)
 
-## Project Structure
+## Public API
 
+All imports from `dcc_mcp_core`:
+
+```python
+# Models
+ActionResultModel, SkillMetadata
+success_result, error_result, from_exception, validate_action_result
+
+# Actions & Events
+ActionRegistry, EventBus
+
+# MCP Protocol Types
+ToolDefinition, ToolAnnotations
+ResourceDefinition, ResourceTemplateDefinition
+PromptArgument, PromptDefinition
+
+# Skills
+SkillScanner, scan_skill_paths, parse_skill_md
+
+# Type Wrappers
+BooleanWrapper, IntWrapper, FloatWrapper, StringWrapper
+wrap_value, unwrap_value, unwrap_parameters
+
+# Filesystem
+get_platform_dir, get_config_dir, get_data_dir, get_log_dir
+get_actions_dir, get_skills_dir, get_skill_paths_from_env
+
+# Constants
+APP_NAME, APP_AUTHOR, DEFAULT_DCC, DEFAULT_LOG_LEVEL
+ENV_LOG_LEVEL, ENV_SKILL_PATHS, SKILL_METADATA_FILE, SKILL_SCRIPTS_DIR
 ```
-dcc_mcp_core/
-├── __init__.py              # Public API exports
-├── models.py                # ActionResultModel, SkillMetadata
-├── actions/
-│   ├── base.py              # Action base class (InputModel/OutputModel)
-│   ├── manager.py           # ActionManager, create/get_action_manager
-│   ├── registry.py          # ActionRegistry (singleton)
-│   ├── middleware.py         # Middleware, LoggingMiddleware, PerformanceMiddleware
-│   ├── events.py            # EventBus (global event_bus instance)
-│   ├── function_adapter.py  # Action-to-function adapters
-│   └── generator.py         # Action template generation
-├── skills/
-│   ├── scanner.py           # SkillScanner
-│   ├── loader.py            # parse_skill_md, load_skill
-│   └── script_action.py     # create_script_action factory
-├── protocols/
-│   ├── types.py             # ToolDefinition, ResourceDefinition, PromptDefinition
-│   ├── base.py              # Resource(ABC), Prompt(ABC)
-│   ├── server.py            # MCPServerProtocol, MCPToolsProtocol
-│   └── adapter.py           # MCPAdapter
-└── utils/
-    ├── filesystem.py         # Platform dirs, env path helpers
-    ├── module_loader.py      # Dynamic module loading
-    ├── decorators.py         # error_handler, with_context
-    ├── dependency_injector.py # inject_dependencies
-    ├── template.py           # Jinja2 template rendering
-    ├── type_wrappers.py      # RPyC-safe type wrappers
-    └── result_factory.py     # success_result, error_result, from_exception
-```
-
-## Development
-
-- Tool manager: [vx](https://github.com/loonghao/vx)
-- Build: Poetry (poetry-core backend), `vx uv build`
-- Test: `vx just test` (nox + pytest + coverage)
-- Lint: `vx just lint` (ruff + isort), fix: `vx just lint-fix`
-- Release: [Release Please](https://github.com/googleapis/release-please) with Conventional Commits
-- CI: GitHub Actions (3 OS x 3 Python versions)
-
-## Related Projects
-
-- [dcc-mcp-rpyc](https://github.com/loonghao/dcc-mcp-rpyc) — RPyC bridge for remote DCC operations
-- [dcc-mcp-maya](https://github.com/loonghao/dcc-mcp-maya) — Maya MCP server implementation

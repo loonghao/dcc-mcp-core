@@ -1,468 +1,1182 @@
-# dcc-mcp-core — Full API Reference
+﻿# dcc-mcp-core
 
-> This document provides comprehensive API documentation for AI agents and downstream projects
-> that depend on dcc-mcp-core. For a concise overview, see [llms.txt](llms.txt).
+> Foundational library for the DCC Model Context Protocol (MCP) ecosystem. Rust-powered core (PyO3) with zero Python dependencies. Provides action registry, structured results, event system, skills/script registration, MCP protocol types, and platform utilities for Digital Content Creation applications (Maya, Blender, Houdini, etc.).
 
----
+## Quick Start
 
-## Models (`dcc_mcp_core.models`)
-
-### ActionResultModel(BaseModel)
-
-Standardized result for all action executions. Every action returns this model.
-
-**Fields:**
-- `success: bool = True` — Whether the execution was successful
-- `message: str` — Human-readable result description
-- `prompt: Optional[str] = None` — Suggestion for AI about next steps
-- `error: Optional[str] = None` — Error message when success is False
-- `context: Dict[str, Any] = {}` — Additional context data (arbitrary key-value)
-
-**Methods:**
-- `with_error(error: str) -> ActionResultModel` — Create copy with error info (sets success=False)
-- `with_context(**kwargs) -> ActionResultModel` — Create copy with updated context
-- `to_dict() -> Dict[str, Any]` — Pydantic v1/v2 compatible dict conversion
-
-**Factory functions (preferred for creation):**
 ```python
-from dcc_mcp_core import success_result, error_result, from_exception
+from dcc_mcp_core import ActionRegistry, success_result, SkillScanner
 
-result = success_result("Created 5 spheres", prompt="Use modify_spheres next", count=5)
-error = error_result("Failed", "File not found", prompt="Check path", path="/bad/path")
-exc_result = from_exception(e, message="Import failed", include_traceback=True)
+# Action registration
+registry = ActionRegistry()
+registry.register(name="create_sphere", description="Creates a sphere", dcc="maya", tags=["geometry"])
+
+# Structured results
+result = success_result("Created sphere", prompt="Modify next", object_name="sphere1")
+print(result.success, result.message, result.context)
+
+# Skill scanning
+scanner = SkillScanner()
+skills = scanner.scan(extra_paths=["/path/to/skills"], dcc_name="maya")
 ```
 
-### SkillMetadata(BaseModel)
+## Installation
 
-Metadata parsed from SKILL.md frontmatter.
+- PyPI: `pip install dcc-mcp-core`
+- Source: `git clone https://github.com/loonghao/dcc-mcp-core.git && maturin develop --features python-bindings,abi3-py38`
+- Python: >=3.7 (abi3 wheel for 3.8+), Rust >=1.75 (for source builds)
+- License: MIT, Zero Python runtime dependencies
 
-**Fields:**
-- `name: str` — Unique identifier
-- `description: str = ""` — Human-readable description
-- `tools: List[str] = []` — Required tool permissions (OpenClaw format)
-- `dcc: str = "python"` — Target DCC application
-- `tags: List[str] = []` — Classification tags
-- `scripts: List[str] = []` — Discovered script file paths
-- `skill_path: str = ""` — Absolute path to skill directory
-- `version: str = "1.0.0"` — Skill version
+## Architecture
 
----
+Rust workspace with 5 sub-crates compiled into `dcc_mcp_core._core` Python extension:
+- `dcc-mcp-models`: ActionResultModel, SkillMetadata
+- `dcc-mcp-actions`: ActionRegistry (DashMap), EventBus (pub/sub)
+- `dcc-mcp-protocols`: MCP type definitions (Tools, Resources, Prompts)
+- `dcc-mcp-skills`: SKILL.md scanning and loading
+- `dcc-mcp-utils`: Filesystem, constants, type wrappers, logging
 
-## Actions System
+## Core Concepts
 
-### Action (`dcc_mcp_core.actions.base.Action`)
+- **ActionRegistry**: Thread-safe action metadata registry using DashMap — register, get, list, filter by DCC
+- **ActionResultModel**: Structured result type (success, message, prompt, error, context) with factory functions
+- **EventBus**: Thread-safe publish/subscribe event system with subscriber IDs
+- **Skills**: Zero-code script registration as MCP tools via SKILL.md + scripts/ directory
+- **MCP Protocol Types**: ToolDefinition, ResourceDefinition, PromptDefinition and related types
+- **Type Wrappers**: RPyC-safe BooleanWrapper, IntWrapper, FloatWrapper, StringWrapper
+- **Filesystem**: Cross-platform directory utilities (config, data, log, actions, skills)
 
-Base class for all DCC operations. Subclass this to create custom actions.
+## Documentation
 
-**Class attributes (override in subclass):**
-- `name: str` — Action name (used for registration and lookup)
-- `description: str` — What this action does
-- `tags: List[str]` — Classification tags
-- `dcc: str` — Target DCC ("maya", "blender", "houdini", "python", etc.)
-- `order: int = 0` — Execution priority (lower = first)
-- `category: str = ""` — Organization category
-- `abstract: bool = False` — If True, not registered
+- [Guide: What is DCC-MCP-Core?](https://loonghao.github.io/dcc-mcp-core/guide/what-is-dcc-mcp-core)
+- [Guide: Getting Started](https://loonghao.github.io/dcc-mcp-core/guide/getting-started)
+- [Guide: Actions & Registry](https://loonghao.github.io/dcc-mcp-core/guide/actions)
+- [Guide: Event System](https://loonghao.github.io/dcc-mcp-core/guide/events)
+- [Guide: Skills System](https://loonghao.github.io/dcc-mcp-core/guide/skills)
+- [Guide: MCP Protocols](https://loonghao.github.io/dcc-mcp-core/guide/protocols)
+- [API: Models](https://loonghao.github.io/dcc-mcp-core/api/models)
+- [API: Actions](https://loonghao.github.io/dcc-mcp-core/api/actions)
+- [API: Events](https://loonghao.github.io/dcc-mcp-core/api/events)
+- [API: Skills](https://loonghao.github.io/dcc-mcp-core/api/skills)
+- [API: Protocols](https://loonghao.github.io/dcc-mcp-core/api/protocols)
+- [API: Utilities](https://loonghao.github.io/dcc-mcp-core/api/utilities)
 
-**Inner classes (override in subclass):**
+## Public API
+
+All imports from `dcc_mcp_core`:
 
 ```python
-class InputModel(Action.InputModel):
-    """Define input parameters with Pydantic fields."""
-    radius: float = Field(1.0, description="Sphere radius")
-    name: Optional[str] = Field(None, description="Object name")
+# Models
+ActionResultModel, SkillMetadata
+success_result, error_result, from_exception, validate_action_result
 
-    @field_validator('radius')
-    def validate_radius(cls, v):
-        if v <= 0:
-            raise ValueError("Must be positive")
-        return v
+# Actions & Events
+ActionRegistry, EventBus
 
-class OutputModel(Action.OutputModel):
-    """Define structured output fields."""
-    object_name: str = Field(description="Created object name")
-    vertex_count: int = Field(description="Number of vertices")
-    # Inherited: prompt: Optional[str] — AI next-step suggestion
+# MCP Protocol Types
+ToolDefinition, ToolAnnotations
+ResourceDefinition, ResourceTemplateDefinition
+PromptArgument, PromptDefinition
+
+# Skills
+SkillScanner, scan_skill_paths, parse_skill_md
+
+# Type Wrappers
+BooleanWrapper, IntWrapper, FloatWrapper, StringWrapper
+wrap_value, unwrap_value, unwrap_parameters
+
+# Filesystem
+get_platform_dir, get_config_dir, get_data_dir, get_log_dir
+get_actions_dir, get_skills_dir, get_skill_paths_from_env
+
+# Constants
+APP_NAME, APP_AUTHOR, DEFAULT_DCC, DEFAULT_LOG_LEVEL
+ENV_LOG_LEVEL, ENV_SKILL_PATHS, SKILL_METADATA_FILE, SKILL_SCRIPTS_DIR
+```
+# What is DCC-MCP-Core?
+
+DCC-MCP-Core is a **foundational library** for the Digital Content Creation (DCC) Model Context Protocol (MCP) ecosystem, providing a unified interface that allows AI to interact with various DCC software such as Maya, Blender, Houdini, and more.
+
+The core is written in **Rust** and exposed to Python via **PyO3**, delivering zero-dependency performance with a clean Python API.
+
+## Core Workflow
+
+```mermaid
+flowchart LR
+    AI([AI Assistant]):::aiNode
+    MCP{{MCP Server}}:::serverNode
+    DCCMCP{{DCC-MCP}}:::serverNode
+    Actions[(DCC Actions)]:::actionsNode
+    DCC[/DCC Software/]:::dccNode
+
+    AI -->|1. Send Request| MCP
+    MCP -->|2. Forward Request| DCCMCP
+    DCCMCP -->|3. Discover & Load| Actions
+    Actions -->|4. Return Info| DCCMCP
+    DCCMCP -->|5. Structured Data| MCP
+    MCP -->|6. Call Function| DCCMCP
+    DCCMCP -->|7. Execute| DCC
+    DCC -->|8. Operation Result| DCCMCP
+    DCCMCP -->|9. Structured Result| MCP
+    MCP -->|10. Return Result| AI
+
+    classDef aiNode fill:#f9d,stroke:#f06,stroke-width:2px,color:#333
+    classDef serverNode fill:#bbf,stroke:#66f,stroke-width:2px,color:#333
+    classDef dccNode fill:#bfb,stroke:#6b6,stroke-width:2px,color:#333
+    classDef actionsNode fill:#fbb,stroke:#f66,stroke-width:2px,color:#333
 ```
 
-**Required method:**
-```python
-def _execute(self) -> None:
-    """Core execution logic. Access self.input, self.context. Set self.output."""
-    radius = self.input.radius
-    cmds = self.context.get("cmds")
-    sphere = cmds.polySphere(r=radius)[0]
-    self.output = self.OutputModel(object_name=sphere, vertex_count=382)
+## Key Features
+
+- **Rust-Powered Core** — All logic implemented in Rust via PyO3 for maximum performance
+- **Zero Python Dependencies** — Python 3.8+ with no third-party runtime dependencies
+- **ActionRegistry** — Thread-safe action registration and lookup using DashMap
+- **EventBus** — Publish/subscribe event system for decoupled communication
+- **Skills System** — Zero-code registration of scripts as MCP tools via SKILL.md
+- **MCP Protocol Types** — Full MCP type definitions (Tools, Resources, Prompts)
+- **Type Wrappers** — RPyC-compatible type wrappers for safe remote calls
+- **Platform Utilities** — Cross-platform filesystem paths, logging, and constants
+
+## Architecture
+
+DCC-MCP-Core uses a Rust workspace with 5 sub-crates, compiled into a single Python extension module `dcc_mcp_core._core`:
+
+```
+dcc-mcp-core/                      # Rust workspace root
+├── src/lib.rs                     # PyO3 module entry point → _core.pyd/.so
+├── python/dcc_mcp_core/
+│   ├── __init__.py                # Python re-exports from _core
+│   └── py.typed                   # PEP 561 marker
+└── crates/
+    ├── dcc-mcp-models/            # ActionResultModel, SkillMetadata
+    ├── dcc-mcp-actions/           # ActionRegistry, EventBus
+    ├── dcc-mcp-protocols/         # MCP type definitions
+    ├── dcc-mcp-skills/            # SKILL.md scanning and loading
+    └── dcc-mcp-utils/             # Filesystem, constants, type wrappers, logging
 ```
 
-**Lifecycle:** `__init__(context)` → `setup(**kwargs)` → `process()` → `ActionResultModel`
-
-**Key methods:**
-- `setup(**kwargs) -> Action` — Validate input, chainable
-- `validate_input(**kwargs) -> InputModel` — Pydantic validation
-- `process() -> ActionResultModel` — Sync execute with error handling
-- `process_async() -> ActionResultModel` — Async execute (thread pool by default)
-- `_execute() -> None` — **Must implement** — core logic
-- `_execute_async() -> None` — Override for native async
-
-### ActionManager (`dcc_mcp_core.actions.manager`)
-
-Central coordinator for Action lifecycle.
+All Python imports come from the top-level `dcc_mcp_core` package:
 
 ```python
-# Recommended: use factory functions
-from dcc_mcp_core import create_action_manager, get_action_manager
+from dcc_mcp_core import (
+    ActionResultModel, ActionRegistry, EventBus,
+    SkillScanner, SkillMetadata,
+    ToolDefinition, ToolAnnotations,
+    ResourceDefinition, PromptDefinition,
+    success_result, error_result,
+    get_config_dir, get_actions_dir,
+)
+```
 
-# Create new (always new instance)
-manager = create_action_manager(
-    dcc_name="maya",
-    name="default",
-    auto_refresh=True,
-    refresh_interval=60,
-    context={"cmds": maya.cmds},    # injected into all actions
-    load_env_paths=True,             # load from DCC_MCP_ACTION_PATHS
-    load_skill_paths=True,           # load from DCC_MCP_SKILL_PATHS
-    extra_skill_paths=["/my/skills"],
+## Related Projects
+
+- [dcc-mcp-rpyc](https://github.com/loonghao/dcc-mcp-rpyc) — RPyC bridge for remote DCC operations
+- [dcc-mcp-maya](https://github.com/loonghao/dcc-mcp-maya) — Maya MCP server implementation
+# Getting Started
+
+## Installation
+
+### From PyPI
+
+```bash
+pip install dcc-mcp-core
+```
+
+### From Source (Development)
+
+```bash
+git clone https://github.com/loonghao/dcc-mcp-core.git
+cd dcc-mcp-core
+
+# Install Rust toolchain (if not already installed)
+# See https://rustup.rs/
+
+# Build and install in development mode
+pip install maturin
+maturin develop --features python-bindings,abi3-py38
+
+# Or use vx (recommended)
+vx just install
+```
+
+## Requirements
+
+- **Python**: >= 3.7 (abi3 wheel for 3.8+)
+- **Rust**: >= 1.75 (for building from source)
+- **License**: MIT
+- **Dependencies**: Zero Python runtime dependencies for 3.8+
+
+## Quick Start
+
+```python
+from dcc_mcp_core import (
+    ActionResultModel, ActionRegistry,
+    success_result, error_result,
+    SkillScanner, SkillMetadata,
 )
 
-# Get cached singleton (same key = same instance)
-manager = get_action_manager("maya")  # returns cached
-manager2 = get_action_manager("maya", force_new=True)  # forces new
+# Create a result model
+result = success_result("Operation completed", prompt="Next step suggestion", key="value")
+print(result.success)   # True
+print(result.message)   # "Operation completed"
+print(result.prompt)    # "Next step suggestion"
+
+# Use the ActionRegistry
+registry = ActionRegistry()
+registry.register(
+    name="create_sphere",
+    description="Creates a sphere in Maya",
+    dcc="maya",
+    tags=["geometry", "creation"],
+)
+actions = registry.list_actions(dcc_name="maya")
+
+# Scan for skills
+scanner = SkillScanner()
+skill_dirs = scanner.scan(extra_paths=["/path/to/skills"], dcc_name="maya")
 ```
 
-**Key methods:**
-```python
-# Discovery
-manager.discover_actions_from_path("/path/to/actions.py")
-manager.discover_actions_from_package("my_actions_package")
-manager.refresh_actions(force=True)
+## Development Setup
 
-# Execution
-result = manager.call_action("create_sphere", radius=2.0, name="ball")
-result = await manager.call_action_async("create_sphere", radius=2.0)
+```bash
+# Clone the repository
+git clone https://github.com/loonghao/dcc-mcp-core.git
+cd dcc-mcp-core
 
-# Info
-info = manager.get_actions_info()  # ActionResultModel with all action metadata
-names = manager.list_available_actions()  # ["create_sphere", "delete_object", ...]
+# Create and activate virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Middleware
-manager.add_middleware(LoggingMiddleware).add_middleware(PerformanceMiddleware, threshold=0.5)
+# Install development dependencies
+pip install -e ".[dev]"
+
+# Or use vx (recommended)
+vx just install
 ```
 
-### ActionRegistry (`dcc_mcp_core.actions.registry.ActionRegistry`)
+## Building the Rust Extension
 
-Singleton registry. Usually accessed through ActionManager, but can be used directly.
+```bash
+# Debug build (fast compile, slower runtime)
+maturin develop --features python-bindings,abi3-py38
 
-```python
-from dcc_mcp_core.actions.registry import ActionRegistry
-
-registry = ActionRegistry()  # always returns same instance
-registry.register(MyAction)
-action_cls = registry.get_action("my_action", dcc_name="maya")
-all_actions = registry.list_actions(dcc_name="maya", tag="geometry")
-dcc_actions = registry.get_actions_by_dcc("maya")  # Dict[str, Type[Action]]
-all_dccs = registry.get_all_dccs()  # ["maya", "blender", ...]
+# Release build (slow compile, optimized runtime)
+maturin develop --release --features python-bindings,abi3-py38
 ```
 
-### Function Adapters (`dcc_mcp_core.actions.function_adapter`)
+## Running Tests
 
-Convert Action classes to plain callable functions (useful for RPyC/API exposure).
+```bash
+# Run tests with coverage
+vx just test
 
-```python
-from dcc_mcp_core.actions import create_function_adapter, create_function_adapters
+# Run specific tests
+vx uvx nox -s pytest -- tests/test_models.py -v
 
-# Single action
-create_sphere = create_function_adapter("create_sphere", dcc_name="maya")
-result = create_sphere(radius=2.0)
+# Run linting
+vx just lint
 
-# All actions for a DCC
-funcs = create_function_adapters(dcc_name="maya", manager=manager)
-result = funcs["create_sphere"](radius=2.0)
+# Run linting with auto-fix
+vx just lint-fix
 ```
 
----
+## Next Steps
 
-## Middleware System (`dcc_mcp_core.actions.middleware`)
+- Learn about [Actions & Registry](/guide/actions) — managing action metadata
+- Explore the [Event System](/guide/events) for pub/sub communication
+- Check out the [Skills System](/guide/skills) for zero-code script registration
+- See [MCP Protocols](/guide/protocols) for protocol type definitions
+# Actions & Registry
 
-```python
-from dcc_mcp_core.actions.middleware import Middleware, MiddlewareChain
+The **ActionRegistry** is the central component for managing action metadata in DCC-MCP-Core. It provides thread-safe registration, lookup, and listing of actions.
 
-class MyMiddleware(Middleware):
-    def process(self, action, **kwargs):
-        # Pre-processing
-        result = super().process(action, **kwargs)  # calls next in chain
-        # Post-processing
-        result.context["custom"] = "data"
-        return result
+## ActionRegistry
 
-chain = MiddlewareChain()
-chain.add(LoggingMiddleware)
-chain.add(PerformanceMiddleware, threshold=0.5)
-chain.add(MyMiddleware)
-first_middleware = chain.build()
-```
-
-**Built-in:**
-- `LoggingMiddleware` — Logs action name, timing, success/failure
-- `PerformanceMiddleware(threshold=1.0)` — Adds `context["performance"]["execution_time"]`, warns if slow
-
----
-
-## Event System (`dcc_mcp_core.actions.events`)
+The `ActionRegistry` is implemented in Rust using `DashMap` for lock-free concurrent reads. Unlike a singleton, each registry instance is independent — eliminating cross-DCC pollution.
 
 ```python
-from dcc_mcp_core.actions.events import event_bus
+from dcc_mcp_core import ActionRegistry
 
-def on_action_done(data):
-    print(f"Action {data['action_name']} completed: {data['result'].success}")
+# Create a new registry
+registry = ActionRegistry()
 
-event_bus.subscribe("action.after_execute.create_sphere", on_action_done)
-event_bus.unsubscribe("action.after_execute.create_sphere", on_action_done)
+# Register an action
+registry.register(
+    name="create_sphere",
+    description="Creates a sphere in the scene",
+    category="geometry",
+    tags=["geometry", "creation"],
+    dcc="maya",
+    version="1.0.0",
+    input_schema='{"type": "object", "properties": {"radius": {"type": "number"}}}',
+    output_schema='{"type": "object", "properties": {"name": {"type": "string"}}}',
+    source_file="/path/to/action.py",
+)
 ```
 
-**Built-in events published by ActionManager:**
-- `action_manager.created` — Manager created
-- `action_manager.before_discover_path` / `after_discover_path`
-- `action_manager.before_refresh` / `after_refresh`
-- `action.before_execute.{name}` / `action.after_execute.{name}` / `action.error.{name}`
-- `skill.loaded` — Skill package loaded
+## Registration Parameters
 
----
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | `str` | — | Action name (used for lookup) |
+| `description` | `str` | `""` | What this action does |
+| `category` | `str` | `""` | Organization category |
+| `tags` | `List[str]` | `[]` | Classification tags |
+| `dcc` | `str` | `"python"` | Target DCC application |
+| `version` | `str` | `"1.0.0"` | Action version |
+| `input_schema` | `Optional[str]` | `None` | JSON Schema string for input |
+| `output_schema` | `Optional[str]` | `None` | JSON Schema string for output |
+| `source_file` | `Optional[str]` | `None` | Source file path |
 
-## Skills System (`dcc_mcp_core.skills`)
+## Querying Actions
 
-Register scripts as MCP tools with zero Python code.
+```python
+# Get action metadata (returns dict or None)
+meta = registry.get_action("create_sphere")
+meta = registry.get_action("create_sphere", dcc_name="maya")
 
-### Directory Structure
+# List all action names for a DCC
+names = registry.list_actions_for_dcc("maya")  # ["create_sphere", ...]
+
+# List all actions with full metadata
+all_actions = registry.list_actions()               # All actions
+maya_actions = registry.list_actions(dcc_name="maya")  # Maya-specific
+
+# Get all registered DCC names
+dccs = registry.get_all_dccs()  # ["maya", "blender", ...]
+
+# Registry info
+print(len(registry))  # Number of registered actions
+```
+
+## Action Metadata Dict
+
+When retrieved via `get_action()` or `list_actions()`, each action returns a dict with:
+
+```python
+{
+    "name": "create_sphere",
+    "internal_name": "create_sphere",
+    "description": "Creates a sphere in the scene",
+    "category": "geometry",
+    "tags": ["geometry", "creation"],
+    "dcc": "maya",
+    "version": "1.0.0",
+    "input_schema": '{"type": "object", ...}',   # JSON string
+    "output_schema": '{"type": "object", ...}',   # JSON string
+    "source_file": "/path/to/action.py",
+}
+```
+
+## ActionResultModel
+
+All action executions should return an `ActionResultModel`:
+
+```python
+from dcc_mcp_core import ActionResultModel, success_result, error_result
+
+# Direct construction
+result = ActionResultModel(
+    success=True,
+    message="Created sphere",
+    prompt="You can now modify the sphere",
+    context={"object_name": "sphere1"},
+)
+
+# Factory functions (recommended)
+result = success_result("Created sphere", prompt="Modify next", object_name="sphere1")
+error = error_result("Failed", "File not found", prompt="Check path")
+
+# Access fields
+print(result.success)    # True
+print(result.message)    # "Created sphere"
+print(result.prompt)     # "You can now modify the sphere"
+print(result.context)    # {"object_name": "sphere1"}
+
+# Create modified copies
+with_err = result.with_error("Something went wrong")
+with_ctx = result.with_context(extra_data="value")
+
+# Serialize
+d = result.to_dict()  # {"success": True, "message": ..., ...}
+```
+
+## Resetting the Registry
+
+```python
+registry.reset()  # Clear all registered actions
+```
+# Event System
+
+DCC-MCP-Core provides a thread-safe publish/subscribe event system via the `EventBus`, implemented in Rust using `DashMap` and `parking_lot`.
+
+## Creating an EventBus
+
+```python
+from dcc_mcp_core import EventBus
+
+bus = EventBus()
+```
+
+## Subscribing to Events
+
+```python
+def on_action_done(**kwargs):
+    print(f"Action completed: {kwargs}")
+
+# Subscribe — returns a subscriber ID
+sub_id = bus.subscribe("action.completed", on_action_done)
+```
+
+## Publishing Events
+
+```python
+# Publish an event with keyword arguments
+bus.publish("action.completed", action_name="create_sphere", success=True)
+```
+
+All registered callbacks for the event name are called with the provided keyword arguments.
+
+## Unsubscribing
+
+```python
+# Unsubscribe using the subscriber ID
+removed = bus.unsubscribe("action.completed", sub_id)  # True if found
+```
+
+## Example: Action Lifecycle Events
+
+```python
+from dcc_mcp_core import EventBus
+
+bus = EventBus()
+
+def on_before_execute(**kwargs):
+    print(f"About to execute: {kwargs.get('action_name')}")
+
+def on_after_execute(**kwargs):
+    print(f"Executed: {kwargs.get('action_name')}, success={kwargs.get('success')}")
+
+# Subscribe
+bus.subscribe("action.before_execute", on_before_execute)
+bus.subscribe("action.after_execute", on_after_execute)
+
+# Publish (typically done by the action manager layer)
+bus.publish("action.before_execute", action_name="create_sphere")
+# ... execute action ...
+bus.publish("action.after_execute", action_name="create_sphere", success=True)
+```
+
+## Suggested Event Names
+
+When building on top of DCC-MCP-Core, consider using these event name conventions:
+
+| Event | Description |
+|-------|-------------|
+| `action.before_execute` | Before executing an action |
+| `action.after_execute` | After executing an action |
+| `action.error` | When an action raises an error |
+| `skill.loaded` | When a skill package is loaded |
+| `skill.scan_complete` | After scanning skill directories |
+| `registry.action_registered` | When a new action is registered |
+# Skills System
+
+The Skills system allows you to register any script (Python, MEL, MaxScript, BAT, Shell, etc.) as an MCP-discoverable tool with **zero Python code**. It directly reuses the [OpenClaw Skills](https://docs.openclaw.ai/tools) ecosystem format.
+
+## Quick Start
+
+### 1. Create a Skill Directory
+
 ```
 maya-geometry/
-├── SKILL.md          # YAML frontmatter + description
-└── scripts/
-    ├── create_sphere.py
-    ├── batch_rename.mel
-    └── export_fbx.bat
+├── SKILL.md
+├── scripts/
+│   ├── create_sphere.py
+│   ├── batch_rename.mel
+│   └── export_fbx.bat
+└── metadata/          # Optional
+    ├── depends.md     # Dependency declarations
+    └── help.md        # Additional documentation
 ```
 
-### SKILL.md Format
+### 2. Write the SKILL.md
+
 ```yaml
 ---
 name: maya-geometry
-description: "Maya geometry tools"
+description: "Maya geometry creation and modification tools"
 tools: ["Bash", "Read"]
 tags: ["maya", "geometry"]
 dcc: maya
+version: "1.0.0"
 ---
 # Maya Geometry Skill
-Detailed description for AI context.
+
+Use these tools to create and modify geometry in Maya.
 ```
 
-### Supported Script Types
+### 3. Set Environment Variable
+
+```bash
+# Linux/macOS
+export DCC_MCP_SKILL_PATHS="/path/to/my-skills"
+
+# Windows
+set DCC_MCP_SKILL_PATHS=C:\path\to\my-skills
+
+# Multiple paths (use platform path separator)
+export DCC_MCP_SKILL_PATHS="/path/skills1:/path/skills2"
+```
+
+### 4. Scan and Load
+
+```python
+from dcc_mcp_core import SkillScanner, scan_skill_paths, parse_skill_md
+
+# Option 1: Use SkillScanner for full control
+scanner = SkillScanner()
+skill_dirs = scanner.scan(
+    extra_paths=["/my/skills"],
+    dcc_name="maya",
+    force_refresh=False,
+)
+
+# Option 2: Convenience function
+skill_dirs = scan_skill_paths(extra_paths=["/my/skills"], dcc_name="maya")
+
+# Option 3: Parse a specific skill directory
+metadata = parse_skill_md("/path/to/maya-geometry")
+if metadata:
+    print(f"Skill: {metadata.name}")
+    print(f"Scripts: {metadata.scripts}")
+    print(f"Tags: {metadata.tags}")
+```
+
+## Supported Script Types
+
 | Extension | Type | Execution |
 |-----------|------|-----------|
 | `.py` | Python | `subprocess` with system Python |
-| `.mel` | MEL | Via DCC adapter in context |
+| `.mel` | MEL (Maya) | Via DCC adapter in context |
 | `.ms` | MaxScript | Via DCC adapter in context |
 | `.bat`, `.cmd` | Batch | `cmd /c` |
 | `.sh`, `.bash` | Shell | `bash` |
 | `.ps1` | PowerShell | `powershell -File` |
 | `.js`, `.jsx` | JavaScript | `node` |
+| `.vbs` | VBScript | `cscript` |
 
-### Programmatic Usage
+## How It Works
+
+1. **SkillScanner** scans directories for `SKILL.md` files (with mtime-based caching)
+2. **parse_skill_md** parses the YAML frontmatter and enumerates `scripts/` directory
+3. **metadata/** directory is discovered for additional files (depends.md, help.md, etc.)
+4. Dependencies declared in `metadata/depends.md` are merged into the metadata
+
+### Search Path Priority
+
+1. **Extra paths** passed to `scan()` (highest priority)
+2. **Environment variable** `DCC_MCP_SKILL_PATHS`
+3. **Platform skills directory** (`get_skills_dir(dcc_name)`)
+4. **Global skills directory** (`get_skills_dir(None)`)
+
+## SkillMetadata Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | `str` | — | Unique identifier |
+| `description` | `str` | `""` | Human-readable description |
+| `tools` | `List[str]` | `[]` | Required tool permissions |
+| `dcc` | `str` | `"python"` | Target DCC application |
+| `tags` | `List[str]` | `[]` | Classification tags |
+| `scripts` | `List[str]` | `[]` | Discovered script file paths |
+| `skill_path` | `str` | `""` | Absolute path to skill directory |
+| `version` | `str` | `"1.0.0"` | Skill version |
+| `depends` | `List[str]` | `[]` | Dependency skill names |
+| `metadata_files` | `List[str]` | `[]` | Files in metadata/ directory |
+
+## Caching
+
+`SkillScanner` caches results based on SKILL.md file modification times. Use `force_refresh=True` to bypass the cache:
+
 ```python
-from dcc_mcp_core.skills import SkillScanner, load_skill, scan_skill_paths
-
-# Scan for skills
 scanner = SkillScanner()
-skill_dirs = scanner.scan(extra_paths=["/my/skills"], dcc_name="maya")
-
-# Load a specific skill
-from dcc_mcp_core.actions.registry import ActionRegistry
-registry = ActionRegistry()
-actions = load_skill("/path/to/maya-geometry", registry=registry, dcc_name="maya")
-
-# Or use convenience function
-dirs = scan_skill_paths(extra_paths=["/my/skills"])
+# Normal scan (uses cache)
+dirs = scanner.scan()
+# Force re-scan
+dirs = scanner.scan(force_refresh=True)
+# Clear cache entirely
+scanner.clear_cache()
 ```
+# MCP Protocols
 
-### Environment Variable
-```bash
-export DCC_MCP_SKILL_PATHS="/path/to/skills1:/path/to/skills2"
-```
+DCC-MCP-Core provides MCP (Model Context Protocol) type definitions as Rust-backed Python classes. These types follow the [MCP Specification](https://modelcontextprotocol.io/specification/2025-11-25).
 
----
-
-## MCP Protocol Layer (`dcc_mcp_core.protocols`)
-
-### Type Definitions (Pydantic models)
+## Tool Definitions
 
 ```python
-from dcc_mcp_core.protocols import (
-    ToolDefinition, ToolAnnotations,
-    ResourceDefinition, ResourceTemplateDefinition,
-    PromptDefinition, PromptArgument,
-)
+from dcc_mcp_core import ToolDefinition, ToolAnnotations
 
+# Create a tool definition
 tool = ToolDefinition(
     name="create_sphere",
+    description="Creates a sphere in the scene",
+    input_schema='{"type": "object", "properties": {"radius": {"type": "number"}}}',
+    output_schema='{"type": "object", "properties": {"name": {"type": "string"}}}',
+)
+
+# Access fields
+print(tool.name)           # "create_sphere"
+print(tool.description)    # "Creates a sphere in the scene"
+print(tool.input_schema)   # JSON string
+print(tool.output_schema)  # JSON string or None
+```
+
+### ToolAnnotations
+
+Behavior hints for MCP tools:
+
+```python
+annotations = ToolAnnotations(
+    title="Create Sphere",
+    read_only_hint=False,
+    destructive_hint=False,
+    idempotent_hint=True,
+    open_world_hint=False,
+)
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | `Optional[str]` | Human-readable title |
+| `read_only_hint` | `Optional[bool]` | Whether the tool only reads data |
+| `destructive_hint` | `Optional[bool]` | Whether the tool may cause destructive changes |
+| `idempotent_hint` | `Optional[bool]` | Whether repeated calls produce the same result |
+| `open_world_hint` | `Optional[bool]` | Whether the tool interacts with external systems |
+
+## Resource Definitions
+
+```python
+from dcc_mcp_core import ResourceDefinition, ResourceTemplateDefinition
+
+# Static resource
+resource = ResourceDefinition(
+    uri="scene://objects",
+    name="Scene Objects",
+    description="All objects in the current scene",
+    mime_type="application/json",
+)
+
+# Resource template (parameterized)
+template = ResourceTemplateDefinition(
+    uri_template="scene://objects/{category}/{name}",
+    name="Scene Object by Category",
+    description="Get objects filtered by category",
+    mime_type="application/json",
+)
+```
+
+## Prompt Definitions
+
+```python
+from dcc_mcp_core import PromptDefinition, PromptArgument
+
+prompt = PromptDefinition(
+    name="model_review",
+    description="Review a 3D model for quality",
+)
+
+arg = PromptArgument(
+    name="object_name",
+    description="Name of the object to review",
+    required=True,
+)
+```
+
+## Type Summary
+
+| Type | Description | Key Fields |
+|------|-------------|------------|
+| `ToolDefinition` | MCP Tool schema | `name`, `description`, `input_schema`, `output_schema` |
+| `ToolAnnotations` | Tool behavior hints | `title`, `read_only_hint`, `destructive_hint`, `idempotent_hint`, `open_world_hint` |
+| `ResourceDefinition` | MCP Resource | `uri`, `name`, `description`, `mime_type` |
+| `ResourceTemplateDefinition` | Parameterized resource | `uri_template`, `name`, `description`, `mime_type` |
+| `PromptArgument` | Prompt parameter | `name`, `description`, `required` |
+| `PromptDefinition` | MCP Prompt | `name`, `description` |
+
+All types support property access (getters/setters) and are backed by Rust structs with serde serialization.
+# Models API
+
+## ActionResultModel
+
+Standardized result type for all action executions. Implemented in Rust, exposed via PyO3.
+
+```python
+from dcc_mcp_core import ActionResultModel
+```
+
+### Constructor
+
+```python
+ActionResultModel(
+    success=True,
+    message="",
+    prompt=None,
+    error=None,
+    context=None,   # Optional[dict]
+)
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `success` | `bool` | Whether the execution was successful |
+| `message` | `str` | Human-readable result description (read/write) |
+| `prompt` | `Optional[str]` | Suggestion for AI about next steps |
+| `error` | `Optional[str]` | Error message when `success` is `False` |
+| `context` | `dict` | Additional context data |
+
+### Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `with_error(error)` | `ActionResultModel` | Create copy with error info (`success=False`) |
+| `with_context(**kwargs)` | `ActionResultModel` | Create copy with updated context |
+| `to_dict()` | `dict` | Convert to dictionary |
+
+### Factory Functions
+
+```python
+from dcc_mcp_core import success_result, error_result, from_exception, validate_action_result
+
+# Success result
+result = success_result(
+    "Created 5 spheres",
+    prompt="Use modify_spheres next",
+    count=5,                           # Extra kwargs go to context
+)
+
+# Error result
+error = error_result(
+    "Failed to create",               # message
+    "File not found: /bad/path",      # error
+    prompt="Check file path",
+    possible_solutions=["Check if file exists", "Verify permissions"],
+    path="/bad/path",                  # Extra kwargs go to context
+)
+
+# From exception
+exc_result = from_exception(
+    "ImportError: module not found",   # error_message
+    message="Import failed",
+    prompt="Install the missing module",
+    include_traceback=True,
+    possible_solutions=["pip install missing-module"],
+)
+
+# Validate/convert any value to ActionResultModel
+validated = validate_action_result(some_value)  # dict, ActionResultModel, or any → ActionResultModel
+```
+
+## SkillMetadata
+
+Metadata parsed from SKILL.md frontmatter. Implemented in Rust.
+
+```python
+from dcc_mcp_core import SkillMetadata
+```
+
+### Constructor
+
+```python
+SkillMetadata(
+    name="my-skill",
+    description="A skill",
+    tools=[],
+    dcc="python",
+    tags=[],
+    scripts=[],
+    skill_path="",
+    version="1.0.0",
+    depends=[],
+    metadata_files=[],
+)
+```
+
+### Properties (all read/write)
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `name` | `str` | — | Unique identifier |
+| `description` | `str` | `""` | Human-readable description |
+| `tools` | `List[str]` | `[]` | Required tool permissions |
+| `dcc` | `str` | `"python"` | Target DCC application |
+| `tags` | `List[str]` | `[]` | Classification tags |
+| `scripts` | `List[str]` | `[]` | Discovered script file paths |
+| `skill_path` | `str` | `""` | Absolute path to skill directory |
+| `version` | `str` | `"1.0.0"` | Skill version |
+| `depends` | `List[str]` | `[]` | Dependency skill names |
+| `metadata_files` | `List[str]` | `[]` | Files found in metadata/ directory |
+# Actions API
+
+## ActionRegistry
+
+`dcc_mcp_core.ActionRegistry` — Thread-safe action registry, implemented in Rust using DashMap.
+
+```python
+from dcc_mcp_core import ActionRegistry
+```
+
+### Constructor
+
+```python
+registry = ActionRegistry()
+```
+
+### Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `register(name, ...)` | `bool` | Register an action with metadata |
+| `get_action(name, dcc_name=None)` | `Optional[dict]` | Get action metadata by name |
+| `list_actions(dcc_name=None)` | `List[dict]` | List all actions with full metadata |
+| `list_actions_for_dcc(dcc_name)` | `List[str]` | List action names for a specific DCC |
+| `get_all_dccs()` | `List[str]` | List all registered DCC names |
+| `reset()` | `None` | Clear all registered actions |
+| `len(registry)` | `int` | Number of registered actions |
+
+### register()
+
+```python
+registry.register(
+    name="create_sphere",
     description="Creates a sphere",
-    inputSchema={"type": "object", "properties": {"radius": {"type": "number"}}},
-    annotations=ToolAnnotations(readOnlyHint=False),
+    category="geometry",
+    tags=["geometry", "creation"],
+    dcc="maya",
+    version="1.0.0",
+    input_schema='{"type": "object", "properties": {}}',   # JSON string
+    output_schema='{"type": "object", "properties": {}}',   # JSON string
+    source_file="/path/to/action.py",
 )
 ```
 
-### Abstract Base Classes
+### get_action()
+
+Returns a dict with action metadata, or `None` if not found:
 
 ```python
-from dcc_mcp_core.protocols import Resource, Prompt
-
-class SceneObjectsResource(Resource):
-    uri = "scene://objects"
-    name = "Scene Objects"
-    description = "All objects in the current scene"
-    mime_type = "application/json"
-    dcc = "maya"
-
-    def read(self, **params) -> str:
-        import json
-        objects = self.context["cmds"].ls(dag=True)
-        return json.dumps(objects)
-
-class ReviewPrompt(Prompt):
-    name = "model_review"
-    description = "Review a 3D model"
-
-    class ArgumentsModel(Prompt.ArgumentsModel):
-        object_name: str = Field(description="Object to review")
-
-    def render(self, **kwargs) -> str:
-        args = self.ArgumentsModel(**kwargs)
-        return f"Review the 3D model '{args.object_name}'"
+meta = registry.get_action("create_sphere")           # Global lookup
+meta = registry.get_action("create_sphere", dcc_name="maya")  # DCC-specific
 ```
 
-### MCPAdapter — Convert to MCP types
+### Action Metadata Dict Keys
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `name` | `str` | Action name |
+| `internal_name` | `str` | Internal name (same as name) |
+| `description` | `str` | Description |
+| `category` | `str` | Category |
+| `tags` | `List[str]` | Tags |
+| `dcc` | `str` | Target DCC |
+| `version` | `str` | Version |
+| `input_schema` | `str` | JSON Schema string |
+| `output_schema` | `str` | JSON Schema string |
+| `source_file` | `Optional[str]` | Source file path |
+# Events API
+
+## EventBus
+
+`dcc_mcp_core.EventBus` — Thread-safe publish/subscribe event system, implemented in Rust using DashMap and parking_lot.
 
 ```python
-from dcc_mcp_core.protocols import MCPAdapter
-
-tool_def = MCPAdapter.action_to_tool(CreateSphereAction)
-resource_def = MCPAdapter.resource_to_definition(SceneObjectsResource)
-prompt_def = MCPAdapter.prompt_to_definition(ReviewPrompt)
-
-# URI template helpers
-params = MCPAdapter.parse_uri_template_params("scene://objects/{category}/{name}")
-# ["category", "name"]
-matched = MCPAdapter.match_uri_to_template("scene://objects/mesh/cube1", "scene://objects/{category}/{name}")
-# {"category": "mesh", "name": "cube1"}
+from dcc_mcp_core import EventBus
 ```
 
-### Server Protocol
+### Constructor
 
 ```python
-from dcc_mcp_core.protocols import MCPServerProtocol
-
-class MyMCPServer:  # implements MCPServerProtocol
-    @property
-    def name(self) -> str: return "my-server"
-    @property
-    def version(self) -> str: return "1.0.0"
-
-    async def list_tools(self): ...
-    async def call_tool(self, name, arguments): ...
-    async def list_resources(self): ...
-    async def read_resource(self, uri): ...
-    async def list_prompts(self): ...
-    async def get_prompt(self, name, arguments=None): ...
-
-# Runtime type checking
-assert isinstance(my_server, MCPServerProtocol)
+bus = EventBus()
 ```
 
----
+### Methods
 
-## Utilities (`dcc_mcp_core.utils`)
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `subscribe(event_name, callback)` | `int` | Subscribe to event, returns subscriber ID |
+| `unsubscribe(event_name, subscriber_id)` | `bool` | Unsubscribe by ID, returns True if found |
+| `publish(event_name, **kwargs)` | `None` | Publish event, calling all subscribers |
 
-### Decorators
+### Usage
+
 ```python
-from dcc_mcp_core.utils.decorators import error_handler, with_context
+from dcc_mcp_core import EventBus
 
-@error_handler
-def risky_operation(data):
-    # Always returns ActionResultModel, catches all exceptions
-    return {"processed": True}
+bus = EventBus()
 
-@with_context()
-def process(data, context):
-    # context defaults to {} if not provided
-    pass
+def on_action_done(**kwargs):
+    print(f"Action: {kwargs.get('action_name')}, success: {kwargs.get('success')}")
+
+# Subscribe
+sub_id = bus.subscribe("action.completed", on_action_done)
+
+# Publish
+bus.publish("action.completed", action_name="create_sphere", success=True)
+
+# Unsubscribe
+bus.unsubscribe("action.completed", sub_id)
 ```
 
-### Type Wrappers (RPyC)
+### Error Handling
+
+If a subscriber callback raises an exception, it is logged via `tracing::error` but does not stop other subscribers from being called.
+# Skills API
+
+## SkillScanner
+
+`dcc_mcp_core.SkillScanner` — Scan directories for SKILL.md files, with mtime-based caching.
+
 ```python
-from dcc_mcp_core.utils.type_wrappers import (
-    wrap_value, unwrap_value, wrap_boolean_parameters, unwrap_parameters,
-    BooleanWrapper, IntWrapper, FloatWrapper, StringWrapper,
-)
-
-wrapped = wrap_value(True)  # BooleanWrapper(True)
-original = unwrap_value(wrapped)  # True
-
-params = {"visible": True, "count": 5}
-wrapped_params = wrap_boolean_parameters(params)
-original_params = unwrap_parameters(wrapped_params)
+from dcc_mcp_core import SkillScanner
 ```
 
-### Module Loading
+### Constructor
+
 ```python
-from dcc_mcp_core.utils.module_loader import load_module_from_path, append_to_python_path
-
-module = load_module_from_path("/path/to/action.py", dependencies={"cmds": maya_cmds}, dcc_name="maya")
-
-with append_to_python_path("/path/to/script.py"):
-    import my_script
+scanner = SkillScanner()
 ```
 
-### Filesystem
+### Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `scan(extra_paths=None, dcc_name=None, force_refresh=False)` | `List[str]` | Scan for skill directories |
+| `clear_cache()` | `None` | Clear the mtime cache |
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `discovered_skills` | `List[str]` | Previously discovered skill directories |
+
+### Search Path Priority
+
+1. `extra_paths` parameter (highest priority)
+2. `DCC_MCP_SKILL_PATHS` environment variable
+3. Platform skills directory for the given DCC
+4. Global skills directory (if `dcc_name` was specified)
+
+## Functions
+
+### parse_skill_md
+
 ```python
-from dcc_mcp_core.utils.filesystem import (
-    get_config_dir, get_data_dir, get_log_dir, get_actions_dir,
-    get_skills_dir, get_skill_paths_from_env, get_actions_paths_from_env,
-)
+from dcc_mcp_core import parse_skill_md
 
-config = get_config_dir()  # Platform-specific config directory
-actions = get_actions_dir("maya")  # .../data/actions/maya/
-skills = get_skills_dir("maya")  # .../data/skills/maya/
-env_paths = get_skill_paths_from_env()  # from DCC_MCP_SKILL_PATHS
+metadata = parse_skill_md("/path/to/skill-dir")  # Returns Optional[SkillMetadata]
 ```
 
-### Dependency Injection
+Parses a SKILL.md file from a skill directory. Returns `None` if the file is missing or invalid.
+
+**Processing steps:**
+1. Read and parse YAML frontmatter from `SKILL.md`
+2. Enumerate scripts in `scripts/` subdirectory
+3. Discover files in `metadata/` subdirectory
+4. Merge dependencies from `metadata/depends.md`
+
+### scan_skill_paths
+
 ```python
-from dcc_mcp_core.utils.dependency_injector import inject_dependencies
+from dcc_mcp_core import scan_skill_paths
 
-inject_dependencies(module, {"cmds": maya_cmds}, inject_core_modules=True, dcc_name="maya")
-# module.cmds == maya_cmds
-# module.DCC_NAME == "maya"
-# module.dcc_mcp_core == <dcc_mcp_core module>
+dirs = scan_skill_paths(extra_paths=["/my/skills"], dcc_name="maya")
 ```
 
----
+Convenience function that creates a temporary `SkillScanner` and runs a scan.
 
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `DCC_MCP_ACTION_PATHS` | Action search paths (platform path separator) |
-| `DCC_MCP_ACTION_PATH_{DCC}` | DCC-specific action paths (e.g., `DCC_MCP_ACTION_PATH_MAYA`) |
+| `DCC_MCP_SKILL_PATHS` | Skill search paths (platform path separator: `;` on Windows, `:` on Unix) |
+# Protocols API
+
+MCP protocol type definitions, implemented as Rust structs exposed via PyO3.
+
+## ToolDefinition
+
+```python
+from dcc_mcp_core import ToolDefinition
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `str` | Tool name (read/write) |
+| `description` | `str` | Tool description (read/write) |
+| `input_schema` | `str` | JSON Schema string for input (read-only) |
+| `output_schema` | `Optional[str]` | JSON Schema string for output (read-only) |
+
+## ToolAnnotations
+
+```python
+from dcc_mcp_core import ToolAnnotations
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `title` | `Optional[str]` | Human-readable title |
+| `read_only_hint` | `Optional[bool]` | Whether the tool only reads data |
+| `destructive_hint` | `Optional[bool]` | Whether the tool may be destructive |
+| `idempotent_hint` | `Optional[bool]` | Whether the tool is idempotent |
+| `open_world_hint` | `Optional[bool]` | Whether the tool interacts with external systems |
+
+## ResourceDefinition
+
+```python
+from dcc_mcp_core import ResourceDefinition
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `uri` | `str` | Resource URI |
+| `name` | `str` | Resource name |
+| `description` | `str` | Description |
+| `mime_type` | `str` | MIME type (default: `"text/plain"`) |
+
+## ResourceTemplateDefinition
+
+```python
+from dcc_mcp_core import ResourceTemplateDefinition
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `uri_template` | `str` | URI template with parameters |
+| `name` | `str` | Template name |
+| `description` | `str` | Description |
+| `mime_type` | `str` | MIME type (default: `"text/plain"`) |
+
+## PromptArgument
+
+```python
+from dcc_mcp_core import PromptArgument
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `str` | Argument name |
+| `description` | `str` | Description |
+| `required` | `bool` | Whether argument is required (default: `False`) |
+
+## PromptDefinition
+
+```python
+from dcc_mcp_core import PromptDefinition
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `str` | Prompt name |
+| `description` | `str` | Description |
+# Utilities API
+
+Utility functions and types provided by the `dcc-mcp-utils` Rust crate.
+
+## Type Wrappers (RPyC)
+
+Type wrappers ensure RPyC remote calls preserve Python type information:
+
+```python
+from dcc_mcp_core import (
+    wrap_value, unwrap_value, unwrap_parameters,
+    BooleanWrapper, IntWrapper, FloatWrapper, StringWrapper,
+)
+
+# Wrap a value
+wrapped = wrap_value(True)          # BooleanWrapper(True)
+wrapped = wrap_value(42)            # IntWrapper(42)
+wrapped = wrap_value(3.14)          # FloatWrapper(3.14)
+wrapped = wrap_value("hello")       # StringWrapper("hello")
+
+# Unwrap a value
+original = unwrap_value(wrapped)    # True / 42 / 3.14 / "hello"
+
+# Unwrap all values in a dict
+params = {"visible": BooleanWrapper(True), "count": IntWrapper(5)}
+unwrapped = unwrap_parameters(params)  # {"visible": True, "count": 5}
+```
+
+### Wrapper Classes
+
+| Class | Wrapped Type | Special Methods |
+|-------|-------------|-----------------|
+| `BooleanWrapper(value)` | `bool` | `__bool__`, `__eq__` |
+| `IntWrapper(value)` | `int` | `__int__`, `__index__` |
+| `FloatWrapper(value)` | `float` | `__float__` |
+| `StringWrapper(value)` | `str` | `__str__` |
+
+All wrappers have a `.value` property and `__repr__`.
+
+## Filesystem
+
+Platform-specific directory utilities, replacing `platformdirs` with the Rust `dirs` crate:
+
+```python
+from dcc_mcp_core import (
+    get_platform_dir,
+    get_config_dir, get_data_dir, get_log_dir,
+    get_actions_dir, get_skills_dir,
+    get_skill_paths_from_env,
+)
+
+# Generic platform directory
+config = get_platform_dir("config")    # ~/.config/dcc-mcp (Linux)
+data = get_platform_dir("data")        # ~/.local/share/dcc-mcp (Linux)
+cache = get_platform_dir("cache")      # ~/.cache/dcc-mcp (Linux)
+
+# Convenience functions
+config_dir = get_config_dir()          # Platform config directory
+data_dir = get_data_dir()              # Platform data directory
+log_dir = get_log_dir()                # .../dcc-mcp/log/
+
+# DCC-specific directories
+actions = get_actions_dir("maya")      # .../dcc-mcp/actions/maya/
+skills = get_skills_dir("maya")        # .../dcc-mcp/skills/maya/
+skills_global = get_skills_dir()       # .../dcc-mcp/skills/
+
+# Environment paths
+paths = get_skill_paths_from_env()     # From DCC_MCP_SKILL_PATHS
+```
+
+### Supported `get_platform_dir` Types
+
+| Type | Description |
+|------|-------------|
+| `"config"` | User configuration directory |
+| `"data"` | User data directory |
+| `"cache"` | User cache directory |
+| `"log"` / `"state"` | Local data directory |
+| `"documents"` | User documents directory |
+
+## Constants
+
+```python
+from dcc_mcp_core import (
+    APP_NAME,            # "dcc-mcp"
+    APP_AUTHOR,          # "dcc-mcp"
+    DEFAULT_DCC,         # "python"
+    DEFAULT_LOG_LEVEL,   # "DEBUG"
+    ENV_LOG_LEVEL,       # "MCP_LOG_LEVEL"
+    ENV_SKILL_PATHS,     # "DCC_MCP_SKILL_PATHS"
+    SKILL_METADATA_FILE, # "SKILL.md"
+    SKILL_SCRIPTS_DIR,   # "scripts"
+)
+```
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
 | `DCC_MCP_SKILL_PATHS` | Skill search paths (platform path separator) |
-| `DCC_MCP_ACTIONS_DIR` | Generic actions directory |
-
-## Exceptions (`dcc_mcp_core.utils.exceptions`)
-
-- `MCPError` — Base exception
-- `ConfigurationError` — Configuration issues
-- `ConnectionError` — Connection issues
-- `OperationError` — Operation failures
-- `ValidationError` — General validation errors
-- `ParameterValidationError` — Parameter validation errors
-- `VersionError` — Version compatibility errors
-- `ActionError` — Base action error (has `action_name`, `action_class`)
-- `ActionParameterError` — Parameter validation (has `parameter_name`, `validation_error`)
-- `ActionExecutionError` — Execution failure (has `execution_phase`, `traceback`)
+| `MCP_LOG_LEVEL` | Log level for tracing (e.g., `"debug"`, `"info"`, `"warn"`) |
