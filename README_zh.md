@@ -11,252 +11,168 @@
 
 [English](README.md) | [中文文档](README_zh.md)
 
-DCC 模型上下文协议（Model Context Protocol，MCP）生态系统的基础库。它提供了在所有其他 DCC-MCP 包中使用的通用工具、基类和共享功能。
+DCC 模型上下文协议（Model Context Protocol，MCP）生态系统的基础库。**Rust 驱动核心**（PyO3），**零 Python 运行时依赖**，提供动作注册表、结构化结果、事件系统、技能包/脚本注册、MCP 协议类型和平台工具函数，用于数字内容创建（DCC）应用（Maya、Blender、Houdini 等）。
 
 > **注意**：本项目处于早期开发阶段。API 可能会随时变化，我们不会提前发出通知。
 
 ## 设计理念与工作流程
 
-DCC-MCP-Core 是一个为数字内容创建(DCC)应用程序设计的动作管理系统，旨在提供一个统一的接口，使 AI 能够与各种 DCC 软件（如 Maya、Blender、Houdini 等）进行交互。
+DCC-MCP-Core 是一个为数字内容创建（DCC）应用程序设计的动作管理系统，旨在提供一个统一的接口，使 AI 能够与各种 DCC 软件进行交互。
 
 ### 核心工作流程
 
-1. **MCP 服务器**：作为中央协调器，接收来自 AI 的请求
-2. **DCC-MCP**：连接 MCP 服务器和具体的 DCC 软件
-3. **动作发现与加载**：DCC-MCP-Core 负责发现、加载和管理动作
-4. **结构化信息返回**：以 AI 友好的结构化格式将动作信息返回给 MCP 服务器
-5. **函数调用与结果返回**：MCP 服务器调用相应的动作函数，并将结果返回给 AI
-
 ```mermaid
-%%{init: {
-  'flowchart': {
-    'nodeSpacing': 50,
-    'rankSpacing': 80,
-    'curve': 'basis',
-    'useMaxWidth': false
-  },
-  'themeVariables': {
-    'fontSize': '16px',
-    'fontFamily': 'arial',
-    'lineWidth': 2
-  }
-} }%%
-
 flowchart LR
-    %% 节点定义
-    AI([<b>AI 助手</b>]):::aiNode
-    MCP{{<b>MCP 服务器</b>}}:::serverNode
-    DCCMCP{{<b>DCC-MCP</b>}}:::serverNode
-    Actions[(
-<b>DCC 动作</b>
-)]:::actionsNode
-    DCC[/<b>DCC 软件</b>/]:::dccNode
+    AI([AI 助手]):::aiNode
+    MCP{{MCP 服务器}}:::serverNode
+    DCCMCP{{DCC-MCP}}:::serverNode
+    Actions[(DCC 动作)]:::actionsNode
+    DCC[/DCC 软件/]:::dccNode
 
-    %% 连接和流程
-    AI -->|<b>1. 发送请求</b>| MCP
-    MCP -->|<b>2. 转发请求</b>| DCCMCP
-    DCCMCP -->|<b>3. 发现与加载</b>| Actions
-    Actions -->|<b>4. 返回信息</b>| DCCMCP
-    DCCMCP -->|<b>5. 结构化数据</b>| MCP
-    MCP -->|<b>6. 调用函数</b>| DCCMCP
-    DCCMCP -->|<b>7. 执行操作</b>| DCC
-    DCC -->|<b>8. 操作结果</b>| DCCMCP
-    DCCMCP -->|<b>9. 结构化结果</b>| MCP
-    MCP -->|<b>10. 返回结果</b>| AI
+    AI -->|1. 发送请求| MCP
+    MCP -->|2. 转发请求| DCCMCP
+    DCCMCP -->|3. 发现与加载| Actions
+    Actions -->|4. 返回信息| DCCMCP
+    DCCMCP -->|5. 结构化数据| MCP
+    MCP -->|6. 调用函数| DCCMCP
+    DCCMCP -->|7. 执行操作| DCC
+    DCC -->|8. 操作结果| DCCMCP
+    DCCMCP -->|9. 结构化结果| MCP
+    MCP -->|10. 返回结果| AI
 
-    %% 样式设置
-    classDef aiNode fill:#f9d,stroke:#f06,stroke-width:3px,color:#333,padding:15px,margin:10px
-    classDef serverNode fill:#bbf,stroke:#66f,stroke-width:3px,color:#333,padding:15px,margin:10px
-    classDef dccNode fill:#bfb,stroke:#6b6,stroke-width:3px,color:#333,padding:15px,margin:10px
-    classDef actionsNode fill:#fbb,stroke:#f66,stroke-width:3px,color:#333,padding:15px,margin:10px
+    classDef aiNode fill:#f9d,stroke:#f06,stroke-width:2px,color:#333
+    classDef serverNode fill:#bbf,stroke:#66f,stroke-width:2px,color:#333
+    classDef dccNode fill:#bfb,stroke:#6b6,stroke-width:2px,color:#333
+    classDef actionsNode fill:#fbb,stroke:#f66,stroke-width:2px,color:#333
 ```
 
-### 动作设计
+## 架构
 
-动作采用简单直观的设计，使开发者能够轻松创建新的 DCC 功能：
+DCC-MCP-Core 使用 Rust workspace，包含 5 个子 crate，编译为单个 Python 扩展模块 `dcc_mcp_core._core`：
 
-- **元数据声明**：通过简单的变量定义动作的基本信息
-- **函数定义**：实现特定的 DCC 操作功能
-- **上下文传递**：通过上下文参数访问 DCC 软件的远程接口
-- **结构化返回**：所有函数返回标准化的结构化数据
-
-### 远程调用架构
-
-DCC-MCP-Core 使用 RPyC 实现远程过程调用，允许在不同进程甚至不同机器上执行 DCC 操作：
-
-- **上下文对象**：包含远程 DCC 客户端和命令接口
-- **透明访问**：动作代码可以像访问本地 API 一样访问远程 DCC API
-- **错误处理**：统一的错误处理机制确保稳定运行
-
-## 包结构
-
-DCC-MCP-Core 组织为几个子包：
-
-- **actions**：动作管理和执行
-  - `base.py`：基础 Action 类定义
-  - `manager.py`：用于动作发现和执行的 ActionManager
-  - `registry.py`：用于注册和检索动作的 ActionRegistry
-  - `middleware.py`：用于横切关注点的中间件
-  - `events.py`：用于动作通信的事件系统
-
-- **models**：MCP 生态系统的数据模型
-  - `action_result.py`：动作的结构化结果模型
-
-- **skills**：Skills 技能包系统，零代码脚本注册
-  - `scanner.py`：SkillScanner 目录扫描，发现 SKILL.md 文件
-  - `loader.py`：SKILL.md 解析器和脚本枚举
-  - `script_action.py`：ScriptAction 工厂，动态生成 Action 子类
-
-- **utils**：实用函数和辅助工具
-  - `module_loader.py`：模块加载工具
-  - `filesystem.py`：文件系统操作
-  - `decorators.py`：用于错误处理的函数装饰器
-  - `dependency_injector.py`：依赖注入工具
-  - `template.py`：模板渲染工具
-  - `platform.py`：平台特定工具
-
-## 中间件系统
-
-DCC-MCP-Core 包含一个中间件系统，用于在动作执行前后插入自定义逻辑：
-
-```python
-from dcc_mcp_core.actions.middleware import LoggingMiddleware, PerformanceMiddleware, MiddlewareChain
-from dcc_mcp_core.actions.manager import ActionManager
-
-# 创建中间件链
-chain = MiddlewareChain()
-
-# 添加中间件（顺序很重要 - 先添加的先执行）
-chain.add(LoggingMiddleware)  # 记录动作执行详情
-chain.add(PerformanceMiddleware, threshold=0.5)  # 监控执行时间
-
-# 使用中间件链创建动作管理器
-manager = ActionManager("maya", middleware=chain.build())
-
-# 通过中间件链执行动作
-result = manager.call_action("create_sphere", radius=2.0)
-
-# 结果中将包含中间件添加的性能数据
-print(f"执行时间：{result.context['performance']['execution_time']:.2f}秒")
+```
+dcc-mcp-core/                      # Rust workspace 根目录
+├── src/lib.rs                     # PyO3 模块入口 → _core.pyd/.so
+├── python/dcc_mcp_core/
+│   ├── __init__.py                # Python 从 _core 重新导出
+│   └── py.typed                   # PEP 561 标记
+└── crates/
+    ├── dcc-mcp-models/            # ActionResultModel, SkillMetadata
+    ├── dcc-mcp-actions/           # ActionRegistry（DashMap）, EventBus（发布/订阅）
+    ├── dcc-mcp-protocols/         # MCP 类型定义（Tools、Resources、Prompts）
+    ├── dcc-mcp-skills/            # SKILL.md 扫描与加载
+    └── dcc-mcp-utils/             # 文件系统、常量、类型包装器、日志
 ```
 
-### 内置中间件
-
-- **LoggingMiddleware**：记录动作执行详情和计时
-- **PerformanceMiddleware**：监控执行时间并警告慢动作
-
-### 自定义中间件
-
-您可以通过继承 `Middleware` 基类来创建自定义中间件：
+所有 Python 导入均来自顶层 `dcc_mcp_core` 包：
 
 ```python
-from dcc_mcp_core.actions.middleware import Middleware
-from dcc_mcp_core.actions.base import Action
-from dcc_mcp_core.models import ActionResultModel
-
-class CustomMiddleware(Middleware):
-    def process(self, action: Action, **kwargs) -> ActionResultModel:
-        # 预处理逻辑
-        print(f"执行 {action.name} 之前")
-
-        # 调用链中的下一个中间件（或动作本身）
-        result = super().process(action, **kwargs)
-
-        # 后处理逻辑
-        print(f"执行 {action.name} 之后：{'成功' if result.success else '失败'}")
-
-        # 您可以根据需要修改结果
-        if result.success:
-            result.context["custom_data"] = "由中间件添加"
-
-        return result
-```
-
-## ActionResultModel
-
-`ActionResultModel` 提供了一个结构化的动作结果格式，使 AI 更容易理解和处理执行结果：
-
-```python
-ActionResultModel(
-    success=True,
-    message="成功创建球体",
-    prompt="现在您可以修改球体的属性或添加材质",
-    error=None,
-    context={
-        "object_name": "sphere_1.0",
-        "position": [0, 0, 0]
-    }
+from dcc_mcp_core import (
+    ActionResultModel, ActionRegistry, EventBus,
+    SkillScanner, SkillMetadata,
+    ToolDefinition, ToolAnnotations,
+    ResourceDefinition, ResourceTemplateDefinition,
+    PromptArgument, PromptDefinition,
+    success_result, error_result, from_exception, validate_action_result,
+    get_config_dir, get_data_dir, get_log_dir, get_actions_dir, get_skills_dir,
+    wrap_value, unwrap_value, unwrap_parameters,
+    BooleanWrapper, IntWrapper, FloatWrapper, StringWrapper,
 )
-```
-
-### 字段
-
-- **success**：布尔值，表示动作是否成功
-- **message**：人类可读的结果消息
-- **prompt**：关于下一步操作的建议
-- **error**：当 success 为 False 时的错误消息
-- **context**：包含额外上下文数据的字典
-
-### 方法
-
-- **to_dict()**：将模型转换为字典，具有版本无关的兼容性（兼容 Pydantic v1 和 v2）
-- **model_dump()** / **dict()**：原生 Pydantic 序列化方法（版本相关）
-
-### 使用示例
-
-```python
-# 创建结果模型
-result = ActionResultModel(
-    success=True,
-    message="操作完成",
-    prompt="下一步建议",
-    context={"key": "value"}
-)
-
-# 转换为字典（版本无关）
-result_dict = result.to_dict()
-
-# 访问字段
-if result.success:
-    print(f"成功：{result.message}")
-    if result.prompt:
-        print(f"下一步：{result.prompt}")
-    print(f"上下文数据：{result.context}")
-else:
-    print(f"错误：{result.error}")
 ```
 
 ## 功能特性
 
-- 基于类的 Action 设计，使用 Pydantic 模型
-- 参数验证和类型检查
-- 带有上下文和提示的结构化结果格式
-- 动态动作发现和加载
-- 用于横切关注点的中间件支持
-- 用于动作通信的事件系统
-- 异步动作执行
-- 全面的错误处理
-- **Skills 技能包系统**：零代码将脚本（MEL、MaxScript、BAT、Shell、Python）注册为 MCP 工具
-- **兼容 OpenClaw**：直接复用 OpenClaw Skills 生态格式（SKILL.md + scripts/）
+- **Rust 驱动核心** — 所有核心逻辑使用 Rust 通过 PyO3 实现，极致性能
+- **零 Python 依赖** — Python 3.8+ 无第三方运行时依赖
+- **ActionRegistry** — 使用 DashMap 实现线程安全的动作注册与查询，无锁并发读取
+- **ActionResultModel** — 结构化结果类型（success、message、prompt、error、context），含工厂函数
+- **EventBus** — 线程安全的发布/订阅事件系统，实现组件间解耦通信
+- **Skills 技能包** — 零代码将脚本（Python、MEL、MaxScript、BAT、Shell、PowerShell、JavaScript）注册为 MCP 工具
+- **MCP 协议类型** — 完整的 [MCP 规范](https://modelcontextprotocol.io/specification/2025-11-25) 类型定义：Tools、Resources、Prompts
+- **类型包装器** — RPyC 兼容的类型包装器（BooleanWrapper、IntWrapper、FloatWrapper、StringWrapper），确保远程调用类型安全
+- **平台工具** — 跨平台文件系统路径、基于 Rust `tracing` 的日志和常量
 
-## Skills 技能包系统
+## 快速上手
 
-Skills 系统允许你将任何脚本（Python、MEL、MaxScript、BAT、Shell 等）零代码注册为 MCP 可发现的工具。直接复用 [OpenClaw Skills](https://docs.openclaw.ai/tools) 生态格式。
+### ActionRegistry
 
-### 快速上手
+```python
+from dcc_mcp_core import ActionRegistry
 
-1. **创建 Skill 目录**，包含 `SKILL.md` 和 `scripts/` 文件夹：
+registry = ActionRegistry()
+registry.register(
+    name="create_sphere",
+    description="在 Maya 中创建球体",
+    dcc="maya",
+    tags=["geometry", "creation"],
+    input_schema='{"type": "object", "properties": {"radius": {"type": "number"}}}',
+)
+
+# 查询动作
+meta = registry.get_action("create_sphere", dcc_name="maya")
+names = registry.list_actions_for_dcc("maya")
+dccs = registry.get_all_dccs()
+```
+
+### ActionResultModel
+
+```python
+from dcc_mcp_core import success_result, error_result, from_exception
+
+# 成功结果（带上下文）
+result = success_result("已创建球体", prompt="修改属性", object_name="sphere1")
+print(result.success)   # True
+print(result.message)   # "已创建球体"
+print(result.context)   # {"object_name": "sphere1"}
+
+# 错误结果
+error = error_result(
+    "创建失败",
+    "文件未找到: /bad/path",
+    prompt="检查文件路径",
+    possible_solutions=["检查文件是否存在"],
+)
+
+# 创建修改后的副本
+with_err = result.with_error("出错了")
+with_ctx = result.with_context(extra_data="value")
+d = result.to_dict()
+```
+
+### EventBus 事件总线
+
+```python
+from dcc_mcp_core import EventBus
+
+bus = EventBus()
+
+def on_action_done(**kwargs):
+    print(f"动作: {kwargs.get('action_name')}, 成功: {kwargs.get('success')}")
+
+sub_id = bus.subscribe("action.completed", on_action_done)
+bus.publish("action.completed", action_name="create_sphere", success=True)
+bus.unsubscribe("action.completed", sub_id)
+```
+
+### Skills 技能包系统
+
+将任何脚本零代码注册为 MCP 工具。直接复用 [OpenClaw Skills](https://docs.openclaw.ai/tools) 生态格式。
+
+1. **创建 Skill 目录**，包含 `SKILL.md` 和 `scripts/`：
 
 ```
 maya-geometry/
 ├── SKILL.md
-└── scripts/
-    ├── create_sphere.py
-    ├── batch_rename.mel
-    └── export_fbx.bat
+├── scripts/
+│   ├── create_sphere.py
+│   ├── batch_rename.mel
+│   └── export_fbx.bat
+└── metadata/          # 可选
+    ├── depends.md
+    └── help.md
 ```
 
-2. **编写 SKILL.md**（标准 OpenClaw 格式）：
+2. **编写 SKILL.md**（YAML frontmatter）：
 
 ```yaml
 ---
@@ -264,41 +180,37 @@ name: maya-geometry
 description: "Maya 几何体创建和修改工具"
 tools: ["Bash", "Read"]
 tags: ["maya", "geometry"]
+dcc: maya
+version: "1.0.0"
 ---
 # Maya Geometry Skill
 
 使用这些工具在 Maya 中创建和修改几何体。
 ```
 
-3. **设置环境变量**指向 Skills 目录：
+3. **设置环境变量**并扫描：
 
 ```bash
-# Linux/macOS
 export DCC_MCP_SKILL_PATHS="/path/to/my-skills"
-
-# Windows
-set DCC_MCP_SKILL_PATHS=C:\path\to\my-skills
-
-# 多路径（使用平台路径分隔符）
-export DCC_MCP_SKILL_PATHS="/path/skills1:/path/skills2"
 ```
-
-4. **完成！** 脚本自动被发现并注册为 MCP 工具：
 
 ```python
-from dcc_mcp_core import create_action_manager
+from dcc_mcp_core import SkillScanner, scan_skill_paths, parse_skill_md
 
-manager = create_action_manager("maya")
-# DCC_MCP_SKILL_PATHS 中的 Skills 自动加载
+scanner = SkillScanner()
+skill_dirs = scanner.scan(extra_paths=["/my/skills"], dcc_name="maya")
 
-# 调用 Skill Action
-result = manager.call_action("maya_geometry__create_sphere", radius=2.0)
+# 或使用便捷函数
+skill_dirs = scan_skill_paths(extra_paths=["/my/skills"], dcc_name="maya")
+
+# 解析特定技能包
+metadata = parse_skill_md("/path/to/maya-geometry")
 ```
 
-### 支持的脚本类型
+#### 支持的脚本类型
 
 | 扩展名 | 类型 | 执行方式 |
-|--------|------|---------|
+|--------|------|----------|
 | `.py` | Python | 通过系统 Python `subprocess` 执行 |
 | `.mel` | MEL (Maya) | 通过 context 中的 DCC 适配器执行 |
 | `.ms` | MaxScript | 通过 context 中的 DCC 适配器执行 |
@@ -306,14 +218,45 @@ result = manager.call_action("maya_geometry__create_sphere", radius=2.0)
 | `.sh`, `.bash` | Shell | `bash` |
 | `.ps1` | PowerShell | `powershell -File` |
 | `.js`, `.jsx` | JavaScript | `node` |
+| `.vbs` | VBScript | `cscript` |
 
-### 工作原理
+### MCP 协议类型
 
-1. **SkillScanner** 扫描目录寻找 `SKILL.md` 文件
-2. **SkillLoader** 解析 YAML frontmatter 并枚举 `scripts/` 目录
-3. **ScriptAction 工厂** 为每个脚本动态生成 Action 子类
-4. Action 注册到现有的 **ActionRegistry**
-5. MCP Server 层可通过 **EventBus** 订阅 `skill.loaded` 事件
+```python
+from dcc_mcp_core import ToolDefinition, ToolAnnotations, ResourceDefinition, PromptDefinition
+
+tool = ToolDefinition(
+    name="create_sphere",
+    description="创建球体",
+    input_schema='{"type": "object", "properties": {"radius": {"type": "number"}}}',
+)
+
+annotations = ToolAnnotations(
+    title="创建球体",
+    read_only_hint=False,
+    destructive_hint=False,
+    idempotent_hint=True,
+)
+
+resource = ResourceDefinition(
+    uri="scene://objects",
+    name="场景对象",
+    description="当前场景中的所有对象",
+    mime_type="application/json",
+)
+```
+
+### 类型包装器（RPyC）
+
+```python
+from dcc_mcp_core import wrap_value, unwrap_value, unwrap_parameters
+
+wrapped = wrap_value(True)          # BooleanWrapper(True)
+original = unwrap_value(wrapped)    # True
+
+params = {"visible": wrap_value(True), "count": wrap_value(5)}
+unwrapped = unwrap_parameters(params)  # {"visible": True, "count": 5}
+```
 
 ## 安装
 
@@ -324,8 +267,15 @@ pip install dcc-mcp-core
 # 或从源代码安装
 git clone https://github.com/loonghao/dcc-mcp-core.git
 cd dcc-mcp-core
-pip install -e .
+pip install maturin
+maturin develop --features python-bindings,abi3-py38
 ```
+
+### 系统要求
+
+- **Python**: >= 3.7（abi3 wheel 支持 3.8+）
+- **Rust**: >= 1.75（从源码构建时需要）
+- **依赖**: Python 3.8+ 零运行时依赖
 
 ## 开发环境设置
 
@@ -339,12 +289,11 @@ python -m venv venv
 source venv/bin/activate  # Windows 系统: venv\Scripts\activate
 
 # 安装开发依赖
-pip install -e .
-pip install pytest pytest-cov pytest-mock pyfakefs
+pip install -e ".[dev]"
 
 # 安装开发工具（推荐使用 vx）
 # 请参阅 https://github.com/loonghao/vx 安装 vx
-vx just install  # 通过 vx 安装项目依赖
+vx just install
 ```
 
 ## 运行测试
@@ -354,7 +303,7 @@ vx just install  # 通过 vx 安装项目依赖
 vx just test
 
 # 运行特定测试
-vx uvx nox -s pytest -- tests/test_action_manager.py -v
+vx uvx nox -s pytest -- tests/test_models.py -v
 
 # 运行代码风格检查
 vx just lint
@@ -366,108 +315,17 @@ vx just lint-fix
 vx just prek-all
 ```
 
-## 示例使用
+## 文档
 
-### 发现和加载动作
+完整文档请访问 [loonghao.github.io/dcc-mcp-core](https://loonghao.github.io/dcc-mcp-core/zh/)。
 
-```python
-from dcc_mcp_core.actions.manager import ActionManager
-
-# 创建一个 Maya 的动作管理器（不从环境变量加载路径）
-manager = ActionManager('maya', load_env_paths=False)
-
-# 注册动作路径
-manager.register_action_path('/path/to/actions')
-
-# 刷新动作（发现并加载）
-manager.refresh_actions()
-
-# 获取所有已注册动作的信息
-actions_info = manager.get_actions_info()
-
-# 打印可用动作的信息
-for action_name, action_info in actions_info.items():
-    print(f"动作: {action_name}")
-    print(f"  描述: {action_info['description']}")
-    print(f"  标签: {', '.join(action_info['tags'])}")
-
-# 调用动作并传递参数
-result = manager.call_action(
-    'create_sphere',
-    radius=2.0,
-    position=[0, 1, 0],
-    name='my_sphere'
-)
-
-# 访问结果
-if result.success:
-    print(f"成功: {result.message}")
-    print(f"创建的对象: {result.context.get('object_name')}")
-    if result.prompt:
-        print(f"下一步建议: {result.prompt}")
-else:
-    print(f"错误: {result.error}")
-```
-
-### Action 设计
-
-DCC-MCP-Core 使用基于类的 Action 设计，使用 Pydantic 模型。每个 Action 都有自己的元数据声明、函数定义、上下文传递和结构化返回。
-
-```python
-from dcc_mcp_core.actions.base import Action
-from pydantic import Field, field_validator
-
-class CreateSphereAction(Action):
-    # 动作元数据
-    name = "create_sphere"
-    description = "在 Maya 中创建一个球体"
-    tags = ["几何体", "创建"]
-    dcc = "maya"
-    order = 0
-
-    # 带验证的输入参数模型
-    class InputModel(Action.InputModel):
-        radius: float = Field(1.0, description="球体的半径")
-        position: list[float] = Field([0, 0, 0], description="球体的位置")
-        name: str = Field(None, description="球体的名称")
-
-        # 参数验证
-        @field_validator('radius')
-        def validate_radius(cls, v):
-            if v <= 0:
-                raise ValueError("半径必须为正数")
-            return v
-
-    # 输出数据模型
-    class OutputModel(Action.OutputModel):
-        object_name: str = Field(description="创建的对象名称")
-        position: list[float] = Field(description="对象的最终位置")
-
-    def _execute(self) -> None:
-        # 访问经过验证的输入参数
-        radius = self.input.radius
-        position = self.input.position
-        name = self.input.name or f"sphere_{radius}"
-
-        # 访问 DCC 上下文（例如，Maya cmds）
-        cmds = self.context.get("cmds")
-
-        try:
-            # 执行 DCC 特定的操作
-            sphere = cmds.polySphere(r=radius, n=name)[0]
-            cmds.move(*position, sphere)
-
-            # 设置结构化输出
-            self.output = self.OutputModel(
-                object_name=sphere,
-                position=position,
-                prompt="现在您可以修改球体的属性或添加材质"
-            )
-        except Exception as e:
-            # 异常将被 Action.process 方法捕获
-            # 并转换为适当的 ActionResultModel
-            raise Exception(f"创建球体失败: {str(e)}") from e
-```
+- [什么是 DCC-MCP-Core?](https://loonghao.github.io/dcc-mcp-core/zh/guide/what-is-dcc-mcp-core)
+- [快速开始](https://loonghao.github.io/dcc-mcp-core/zh/guide/getting-started)
+- [Actions 与注册表](https://loonghao.github.io/dcc-mcp-core/zh/guide/actions)
+- [事件系统](https://loonghao.github.io/dcc-mcp-core/zh/guide/events)
+- [Skills 技能包](https://loonghao.github.io/dcc-mcp-core/zh/guide/skills)
+- [MCP 协议](https://loonghao.github.io/dcc-mcp-core/zh/guide/protocols)
+- [API 参考](https://loonghao.github.io/dcc-mcp-core/zh/api/models)
 
 ## 版本发布流程
 
@@ -480,10 +338,8 @@ class CreateSphereAction(Action):
 
 ### 提交信息格式
 
-本项目遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范：
-
 | 前缀 | 描述 | 版本变更 |
-|------|------|---------|
+|------|------|----------|
 | `feat:` | 新功能 | Minor（`0.x.0`） |
 | `fix:` | Bug 修复 | Patch（`0.0.x`） |
 | `feat!:` 或 `BREAKING CHANGE:` | 破坏性变更 | Major（`x.0.0`） |
@@ -492,26 +348,6 @@ class CreateSphereAction(Action):
 | `ci:` | CI/CD 变更 | 不触发发布 |
 | `refactor:` | 代码重构 | 不触发发布 |
 | `test:` | 添加测试 | 不触发发布 |
-
-### 示例
-
-```bash
-# 新功能（升级次版本号）
-git commit -m "feat: add batch action execution support"
-
-# Bug 修复（升级补丁版本号）
-git commit -m "fix: resolve middleware chain ordering issue"
-
-# 破坏性变更（升级主版本号）
-git commit -m "feat!: redesign Action base class API"
-
-# 带作用域的提交
-git commit -m "feat(skills): add PowerShell script support"
-
-# 不触发发布
-git commit -m "docs: update API reference"
-git commit -m "ci: add Python 3.14 to test matrix"
-```
 
 ## 贡献
 
