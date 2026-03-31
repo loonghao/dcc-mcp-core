@@ -11,168 +11,367 @@
 
 [中文文档](README_zh.md) | [English](README.md)
 
-Foundational library for the DCC Model Context Protocol (MCP) ecosystem. **Rust-powered core** (PyO3) with **zero Python runtime dependencies**, providing action registry, structured results, event system, skills/script registration, MCP protocol types, and platform utilities for Digital Content Creation applications (Maya, Blender, Houdini, etc.).
+Foundational library for the DCC Model Context Protocol (MCP) ecosystem. It provides common utilities, base classes, and shared functionality that are used across all other DCC-MCP packages.
 
 > **Note**: This project is in early development stage. The API may change at any time without prior notice.
 
 ## Design Philosophy and Workflow
 
-DCC-MCP-Core is an action management system designed for Digital Content Creation (DCC) applications, aiming to provide a unified interface that allows AI to interact with various DCC software.
+DCC-MCP-Core is an action management system designed for Digital Content Creation (DCC) applications, aiming to provide a unified interface that allows AI to interact with various DCC software (such as Maya, Blender, Houdini, etc.).
 
 ### Core Workflow
 
+1. **MCP Server**: Acts as a central coordinator, receiving requests from AI
+2. **DCC-MCP**: Connects the MCP server and specific DCC software
+3. **Action Discovery and Loading**: DCC-MCP-Core is responsible for discovering, loading, and managing actions
+4. **Structured Information Return**: Returns action information in an AI-friendly structured format to the MCP server
+5. **Function Calls and Result Return**: MCP server calls the corresponding action functions and returns the results to AI
+
 ```mermaid
+%%{init: {
+  'flowchart': {
+    'nodeSpacing': 50,
+    'rankSpacing': 80,
+    'curve': 'basis',
+    'useMaxWidth': false
+  },
+  'themeVariables': {
+    'fontSize': '16px',
+    'fontFamily': 'arial',
+    'lineWidth': 2
+  }
+} }%%
+
 flowchart LR
-    AI([AI Assistant]):::aiNode
-    MCP{{MCP Server}}:::serverNode
-    DCCMCP{{DCC-MCP}}:::serverNode
-    Actions[(DCC Actions)]:::actionsNode
-    DCC[/DCC Software/]:::dccNode
+    %% Node definitions with custom styling
+    AI([<b>AI Assistant</b>]):::aiNode
+    MCP{{<b>MCP Server</b>}}:::serverNode
+    DCCMCP{{<b>DCC-MCP</b>}}:::serverNode
+    Actions[(
+<b>DCC Actions</b>
+)]:::actionsNode
+    DCC[/<b>DCC Software</b>/]:::dccNode
 
-    AI -->|1. Send Request| MCP
-    MCP -->|2. Forward Request| DCCMCP
-    DCCMCP -->|3. Discover & Load| Actions
-    Actions -->|4. Return Info| DCCMCP
-    DCCMCP -->|5. Structured Data| MCP
-    MCP -->|6. Call Function| DCCMCP
-    DCCMCP -->|7. Execute| DCC
-    DCC -->|8. Operation Result| DCCMCP
-    DCCMCP -->|9. Structured Result| MCP
-    MCP -->|10. Return Result| AI
+    %% Connections and workflow
+    AI -->|<b>1. Send Request</b>| MCP
+    MCP -->|<b>2. Forward Request</b>| DCCMCP
+    DCCMCP -->|<b>3. Discover & Load</b>| Actions
+    Actions -->|<b>4. Return Info</b>| DCCMCP
+    DCCMCP -->|<b>5. Structured Data</b>| MCP
+    MCP -->|<b>6. Call Function</b>| DCCMCP
+    DCCMCP -->|<b>7. Execute</b>| DCC
+    DCC -->|<b>8. Operation Result</b>| DCCMCP
+    DCCMCP -->|<b>9. Structured Result</b>| MCP
+    MCP -->|<b>10. Return Result</b>| AI
 
-    classDef aiNode fill:#f9d,stroke:#f06,stroke-width:2px,color:#333
-    classDef serverNode fill:#bbf,stroke:#66f,stroke-width:2px,color:#333
-    classDef dccNode fill:#bfb,stroke:#6b6,stroke-width:2px,color:#333
-    classDef actionsNode fill:#fbb,stroke:#f66,stroke-width:2px,color:#333
+    %% Style definitions
+    classDef aiNode fill:#f9d,stroke:#f06,stroke-width:3px,color:#333,padding:15px,margin:10px
+    classDef serverNode fill:#bbf,stroke:#66f,stroke-width:3px,color:#333,padding:15px,margin:10px
+    classDef dccNode fill:#bfb,stroke:#6b6,stroke-width:3px,color:#333,padding:15px,margin:10px
+    classDef actionsNode fill:#fbb,stroke:#f66,stroke-width:3px,color:#333,padding:15px,margin:10px
 ```
 
-## Architecture
+## Class-Based Action Design
 
-DCC-MCP-Core uses a Rust workspace with 5 sub-crates, compiled into a single Python extension module `dcc_mcp_core._core`:
+DCC-MCP-Core uses a class-based approach for defining actions, providing strong typing, validation, and structured output:
 
-```
-dcc-mcp-core/                      # Rust workspace root
-├── src/lib.rs                     # PyO3 module entry point → _core.pyd/.so
-├── python/dcc_mcp_core/
-│   ├── __init__.py                # Python re-exports from _core
-│   └── py.typed                   # PEP 561 marker
-└── crates/
-    ├── dcc-mcp-models/            # ActionResultModel, SkillMetadata
-    ├── dcc-mcp-actions/           # ActionRegistry (DashMap), EventBus (pub/sub)
-    ├── dcc-mcp-protocols/         # MCP type definitions (Tools, Resources, Prompts)
-    ├── dcc-mcp-skills/            # SKILL.md scanning and loading
-    └── dcc-mcp-utils/             # Filesystem, constants, type wrappers, logging
-```
+### Action Base Class
 
-All Python imports come from the top-level `dcc_mcp_core` package:
+Actions inherit from the `Action` base class, which provides a standardized structure:
 
 ```python
-from dcc_mcp_core import (
-    ActionResultModel, ActionRegistry, EventBus,
-    SkillScanner, SkillMetadata,
-    ToolDefinition, ToolAnnotations,
-    ResourceDefinition, ResourceTemplateDefinition,
-    PromptArgument, PromptDefinition,
-    success_result, error_result, from_exception, validate_action_result,
-    get_config_dir, get_data_dir, get_log_dir, get_actions_dir, get_skills_dir,
-    wrap_value, unwrap_value, unwrap_parameters,
-    BooleanWrapper, IntWrapper, FloatWrapper, StringWrapper,
+from dcc_mcp_core.actions.base import Action
+from dcc_mcp_core.models import ActionResultModel
+from pydantic import Field, field_validator, model_validator
+from typing import List, Optional
+
+class CreateSphereAction(Action):
+    # Metadata as class attributes
+    name = "create_sphere"
+    description = "Creates a sphere in the scene"
+    tags = ["geometry", "creation"]
+    dcc = "maya"  # DCC this action is for
+    order = 0  # Execution order priority
+
+    # Input parameters model with validation
+    class InputModel(Action.InputModel):
+        radius: float = Field(default=1.0, description="Radius of the sphere")
+        position: List[float] = Field(default=[0, 0, 0], description="Position of the sphere")
+        name: Optional[str] = Field(default=None, description="Name of the sphere")
+
+        # Parameter validation example
+        @field_validator('radius')
+        def validate_radius(cls, v):
+            if v <= 0:
+                raise ValueError("Radius must be positive")
+            return v
+
+        # Model-level validation example
+        @model_validator(mode='after')
+        def validate_model(self):
+            # Example: if name is provided, position must not be origin
+            if self.name and self.position == [0, 0, 0]:
+                raise ValueError("Position must not be origin when name is specified")
+            return self
+
+    # Output data model
+    class OutputModel(Action.OutputModel):
+        object_name: str = Field(description="Name of the created object")
+        position: List[float] = Field(description="Final position of the object")
+        # Inherited from base OutputModel
+        prompt: Optional[str] = Field(default=None, description="Suggestion for AI about next steps")
+
+    def _execute(self) -> None:
+        # Access validated input parameters
+        radius = self.input.radius
+        position = self.input.position
+        name = self.input.name or f"sphere_{radius}"
+
+        # Access DCC context (e.g., Maya cmds)
+        cmds = self.context.get("cmds")
+
+        # Execute DCC-specific operation
+        sphere = cmds.polySphere(r=radius, n=name)[0]
+        cmds.move(*position, sphere)
+
+        # Set structured output
+        self.output = self.OutputModel(
+            object_name=sphere,
+            position=position,
+            prompt="You can now modify the sphere's attributes or add materials"
+        )
+
+    # Optional: Override async execution for native async support
+    async def _execute_async(self) -> None:
+        # By default, this runs _execute in a thread pool
+        # You can override for native async implementation
+        import asyncio
+        # Example of async operation
+        await asyncio.sleep(0.1)  # Simulate async work
+        # Then perform the same operations as in _execute
+```
+
+### Key Features
+
+- **Strong Type Checking**: Input and output parameters are defined using Pydantic models
+- **Input Validation**: Automatic validation of input parameters with custom validation rules
+- **Structured Output**: Standardized output format with context and prompts
+- **Metadata Declaration**: Clear metadata definition through class attributes
+- **Error Handling**: Unified error handling and reporting
+
+## ActionResultModel
+
+The `ActionResultModel` provides a structured format for action results, making it easier for AI to understand and process the outcome:
+
+```python
+ActionResultModel(
+    success=True,
+    message="Successfully created sphere",
+    prompt="You can now modify the sphere's attributes or add materials",
+    error=None,
+    context={
+        "object_name": "sphere_1.0",
+        "position": [0, 0, 0]
+    }
 )
 ```
+
+### Fields
+
+- **success**: Boolean indicating if the action was successful
+- **message**: Human-readable result message
+- **prompt**: Suggestion for AI about next steps or actions
+- **error**: Error message when success is False
+- **context**: Dictionary containing additional context data
+
+### Methods
+
+- **to_dict()**: Converts the model to a dictionary, with version-independent compatibility between Pydantic v1 and v2
+- **model_dump()** / **dict()**: Native Pydantic serialization methods (version dependent)
+
+### Usage Example
+
+```python
+# Create a result model
+result = ActionResultModel(
+    success=True,
+    message="Operation completed",
+    prompt="Next step suggestion",
+    context={"key": "value"}
+)
+
+# Convert to dictionary (version-independent)
+result_dict = result.to_dict()
+
+# Access fields
+if result.success:
+    print(f"Success: {result.message}")
+    if result.prompt:
+        print(f"Next step: {result.prompt}")
+    print(f"Context data: {result.context}")
+else:
+    print(f"Error: {result.error}")
+```
+
+## ActionManager
+
+The `ActionManager` class is responsible for discovering, loading, and executing actions:
+
+```python
+from dcc_mcp_core.actions.manager import ActionManager
+
+# Create an ActionManager for a specific DCC
+manager = ActionManager("maya")
+
+# Register action paths
+manager.register_action_path("/path/to/actions")
+
+# Refresh actions (discover and load)
+manager.refresh_actions()
+
+# Get information about all registered actions
+actions_info = manager.get_actions_info()
+
+# Execute an action with parameters
+result = manager.call_action(
+    "create_sphere",
+    radius=2.0,
+    position=[1, 1, 1]
+)
+
+# Access the result
+if result.success:
+    print(f"Created: {result.context['object_name']}")
+    print(f"Next step: {result.prompt}")
+else:
+    print(f"Error: {result.error}")
+```
+
+### Key Features
+
+- **Dynamic Discovery**: Automatically discovers and loads actions from registered paths
+- **Validation**: Validates input parameters before execution
+- **Context Injection**: Injects DCC context into actions
+- **Middleware Support**: Supports middleware for cross-cutting concerns like logging and performance monitoring
+- **Asynchronous Execution**: Supports both synchronous and asynchronous action execution
+
+## Middleware System
+
+DCC-MCP-Core includes a middleware system for inserting custom logic before and after action execution:
+
+```python
+from dcc_mcp_core.actions.middleware import LoggingMiddleware, PerformanceMiddleware, MiddlewareChain
+from dcc_mcp_core.actions.manager import ActionManager
+
+# Create a middleware chain
+chain = MiddlewareChain()
+
+# Add middleware (order matters - first added is executed first)
+chain.add(LoggingMiddleware)  # Logs action execution details
+chain.add(PerformanceMiddleware, threshold=0.5)  # Monitors execution time
+
+# Create an action manager with the middleware chain
+manager = ActionManager("maya", middleware=chain.build())
+
+# Execute actions through the middleware chain
+result = manager.call_action("create_sphere", radius=2.0)
+
+# The result will include performance data added by the middleware
+print(f"Execution time: {result.context['performance']['execution_time']:.2f}s")
+```
+
+### Built-in Middleware
+
+- **LoggingMiddleware**: Logs action execution details and timing
+- **PerformanceMiddleware**: Monitors execution time and warns about slow actions
+
+### Custom Middleware
+
+You can create custom middleware by inheriting from the `Middleware` base class:
+
+```python
+from dcc_mcp_core.actions.middleware import Middleware
+from dcc_mcp_core.actions.base import Action
+from dcc_mcp_core.models import ActionResultModel
+
+class CustomMiddleware(Middleware):
+    def process(self, action: Action, **kwargs) -> ActionResultModel:
+        # Pre-processing logic
+        print(f"Before executing {action.name}")
+
+        # Call the next middleware in the chain (or the action itself)
+        result = super().process(action, **kwargs)
+
+        # Post-processing logic
+        print(f"After executing {action.name}: {'Success' if result.success else 'Failed'}")
+
+        # You can modify the result if needed
+        if result.success:
+            result.context["custom_data"] = "Added by middleware"
+
+        return result
+```
+
+## Project Structure
+
+DCC-MCP-Core is organized into several subpackages:
+
+- **actions**: Action management and execution
+  - `base.py`: Base Action class definition with Pydantic models
+  - `manager.py`: ActionManager for action discovery and execution
+  - `registry.py`: ActionRegistry for registering and retrieving actions
+  - `middleware.py`: Middleware system for cross-cutting concerns
+  - `events.py`: Event system for action communication
+  - `generator.py`: Utilities for generating action templates
+  - `adapter.py`: Adapters for legacy action functions
+
+- **models**: Data models for the MCP ecosystem
+  - `models.py`: Structured result model and other data models
+
+- **skills**: Skills system for zero-code script registration
+  - `scanner.py`: SkillScanner for discovering SKILL.md files
+  - `loader.py`: SKILL.md parser and script enumerator
+  - `script_action.py`: ScriptAction factory for dynamic Action generation
+
+- **utils**: Utility functions and helpers
+  - `module_loader.py`: Module loading utilities
+  - `filesystem.py`: File system operations
+  - `decorators.py`: Function decorators for error handling
+  - `dependency_injector.py`: Dependency injection utilities
+  - `template.py`: Template rendering utilities
+  - `platform.py`: Platform-specific utilities
 
 ## Features
 
-- **Rust-Powered Core** — All logic implemented in Rust via PyO3 for maximum performance
-- **Zero Python Dependencies** — Python 3.8+ with no third-party runtime dependencies
-- **ActionRegistry** — Thread-safe action registration and lookup using DashMap for lock-free concurrent reads
-- **ActionResultModel** — Structured result type (success, message, prompt, error, context) with factory functions
-- **EventBus** — Thread-safe publish/subscribe event system for decoupled component communication
-- **Skills System** — Zero-code registration of scripts (Python, MEL, MaxScript, BAT, Shell, PowerShell, JavaScript) as MCP tools via SKILL.md
-- **MCP Protocol Types** — Full [MCP specification](https://modelcontextprotocol.io/specification/2025-11-25) type definitions for Tools, Resources, and Prompts
-- **Type Wrappers** — RPyC-compatible type wrappers (BooleanWrapper, IntWrapper, FloatWrapper, StringWrapper) ensuring type safety in remote procedure calls
-- **Platform Utilities** — Cross-platform filesystem paths, logging via Rust `tracing`, and constants
+- Class-based Action design with Pydantic models
+- Parameter validation and type checking
+- Structured result format with context and prompts
+- Dynamic action discovery and loading
+- Middleware support for cross-cutting concerns
+- Event system for action communication
+- Asynchronous action execution
+- Comprehensive error handling
+- **Skills system**: Zero-code registration of scripts (MEL, MaxScript, BAT, Shell, Python) as MCP tools
+- **OpenClaw compatible**: Direct reuse of the OpenClaw Skills ecosystem format (SKILL.md + scripts/)
 
-## Quick Start
+## Skills System
 
-### ActionRegistry
+The Skills system allows you to register any script (Python, MEL, MaxScript, BAT, Shell, etc.) as an MCP-discoverable tool with zero Python code. It directly reuses the [OpenClaw Skills](https://docs.openclaw.ai/tools) ecosystem format.
 
-```python
-from dcc_mcp_core import ActionRegistry
+### Quick Start
 
-registry = ActionRegistry()
-registry.register(
-    name="create_sphere",
-    description="Creates a sphere in Maya",
-    dcc="maya",
-    tags=["geometry", "creation"],
-    input_schema='{"type": "object", "properties": {"radius": {"type": "number"}}}',
-)
-
-# Query actions
-meta = registry.get_action("create_sphere", dcc_name="maya")
-names = registry.list_actions_for_dcc("maya")
-dccs = registry.get_all_dccs()
-```
-
-### ActionResultModel
-
-```python
-from dcc_mcp_core import success_result, error_result, from_exception
-
-# Success result with context
-result = success_result("Created sphere", prompt="Modify next", object_name="sphere1")
-print(result.success)   # True
-print(result.message)   # "Created sphere"
-print(result.context)   # {"object_name": "sphere1"}
-
-# Error result
-error = error_result(
-    "Failed to create",
-    "File not found: /bad/path",
-    prompt="Check file path",
-    possible_solutions=["Check if file exists"],
-)
-
-# Create modified copies
-with_err = result.with_error("Something went wrong")
-with_ctx = result.with_context(extra_data="value")
-d = result.to_dict()
-```
-
-### EventBus
-
-```python
-from dcc_mcp_core import EventBus
-
-bus = EventBus()
-
-def on_action_done(**kwargs):
-    print(f"Action: {kwargs.get('action_name')}, success: {kwargs.get('success')}")
-
-sub_id = bus.subscribe("action.completed", on_action_done)
-bus.publish("action.completed", action_name="create_sphere", success=True)
-bus.unsubscribe("action.completed", sub_id)
-```
-
-### Skills System
-
-Register any script as an MCP tool with zero code. Directly reuses the [OpenClaw Skills](https://docs.openclaw.ai/tools) ecosystem format.
-
-1. **Create a Skill directory** with `SKILL.md` and `scripts/`:
+1. **Create a Skill directory** with a `SKILL.md` and `scripts/` folder:
 
 ```
 maya-geometry/
 ├── SKILL.md
-├── scripts/
-│   ├── create_sphere.py
-│   ├── batch_rename.mel
-│   └── export_fbx.bat
-└── metadata/          # Optional
-    ├── depends.md
-    └── help.md
+└── scripts/
+    ├── create_sphere.py
+    ├── batch_rename.mel
+    └── export_fbx.bat
 ```
 
-2. **Write the SKILL.md** (YAML frontmatter):
+2. **Write the SKILL.md** (standard OpenClaw format):
 
 ```yaml
 ---
@@ -180,34 +379,38 @@ name: maya-geometry
 description: "Maya geometry creation and modification tools"
 tools: ["Bash", "Read"]
 tags: ["maya", "geometry"]
-dcc: maya
-version: "1.0.0"
 ---
 # Maya Geometry Skill
 
 Use these tools to create and modify geometry in Maya.
 ```
 
-3. **Set environment variable** and scan:
+3. **Set the environment variable** to point to your skills directory:
 
 ```bash
+# Linux/macOS
 export DCC_MCP_SKILL_PATHS="/path/to/my-skills"
+
+# Windows
+set DCC_MCP_SKILL_PATHS=C:\path\to\my-skills
+
+# Multiple paths (use platform path separator)
+export DCC_MCP_SKILL_PATHS="/path/skills1:/path/skills2"
 ```
+
+4. **Done!** Scripts are auto-discovered and registered as MCP tools:
 
 ```python
-from dcc_mcp_core import SkillScanner, scan_skill_paths, parse_skill_md
+from dcc_mcp_core import create_action_manager
 
-scanner = SkillScanner()
-skill_dirs = scanner.scan(extra_paths=["/my/skills"], dcc_name="maya")
+manager = create_action_manager("maya")
+# Skills from DCC_MCP_SKILL_PATHS are automatically loaded
 
-# Or use convenience function
-skill_dirs = scan_skill_paths(extra_paths=["/my/skills"], dcc_name="maya")
-
-# Parse a specific skill
-metadata = parse_skill_md("/path/to/maya-geometry")
+# Call a skill action
+result = manager.call_action("maya_geometry__create_sphere", radius=2.0)
 ```
 
-#### Supported Script Types
+### Supported Script Types
 
 | Extension | Type | Execution |
 |-----------|------|-----------|
@@ -218,45 +421,14 @@ metadata = parse_skill_md("/path/to/maya-geometry")
 | `.sh`, `.bash` | Shell | `bash` |
 | `.ps1` | PowerShell | `powershell -File` |
 | `.js`, `.jsx` | JavaScript | `node` |
-| `.vbs` | VBScript | `cscript` |
 
-### MCP Protocol Types
+### How It Works
 
-```python
-from dcc_mcp_core import ToolDefinition, ToolAnnotations, ResourceDefinition, PromptDefinition
-
-tool = ToolDefinition(
-    name="create_sphere",
-    description="Creates a sphere",
-    input_schema='{"type": "object", "properties": {"radius": {"type": "number"}}}',
-)
-
-annotations = ToolAnnotations(
-    title="Create Sphere",
-    read_only_hint=False,
-    destructive_hint=False,
-    idempotent_hint=True,
-)
-
-resource = ResourceDefinition(
-    uri="scene://objects",
-    name="Scene Objects",
-    description="All objects in the current scene",
-    mime_type="application/json",
-)
-```
-
-### Type Wrappers (RPyC)
-
-```python
-from dcc_mcp_core import wrap_value, unwrap_value, unwrap_parameters
-
-wrapped = wrap_value(True)          # BooleanWrapper(True)
-original = unwrap_value(wrapped)    # True
-
-params = {"visible": wrap_value(True), "count": wrap_value(5)}
-unwrapped = unwrap_parameters(params)  # {"visible": True, "count": 5}
-```
+1. **SkillScanner** scans directories for `SKILL.md` files
+2. **SkillLoader** parses the YAML frontmatter and enumerates `scripts/`
+3. **ScriptAction factory** generates Action subclasses for each script
+4. Actions are registered in the existing **ActionRegistry**
+5. MCP Server layer can subscribe to `skill.loaded` events via **EventBus**
 
 ## Installation
 
@@ -267,15 +439,8 @@ pip install dcc-mcp-core
 # Or install from source
 git clone https://github.com/loonghao/dcc-mcp-core.git
 cd dcc-mcp-core
-pip install maturin
-maturin develop --features python-bindings,abi3-py38
+pip install -e .
 ```
-
-### Requirements
-
-- **Python**: >= 3.7 (abi3 wheel for 3.8+)
-- **Rust**: >= 1.75 (for building from source)
-- **Dependencies**: Zero Python runtime dependencies for 3.8+
 
 ## Development Setup
 
@@ -289,11 +454,12 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install development dependencies
-pip install -e ".[dev]"
+pip install -e .
+pip install pytest pytest-cov pytest-mock pyfakefs
 
-# Or use vx (recommended)
+# Install development tools (recommended: use vx)
 # See https://github.com/loonghao/vx for vx installation
-vx just install
+vx just install  # Install project dependencies via vx
 ```
 
 ## Running Tests
@@ -303,7 +469,7 @@ vx just install
 vx just test
 
 # Run specific tests
-vx uvx nox -s pytest -- tests/test_models.py -v
+vx uvx nox -s pytest -- tests/test_action_manager.py -v
 
 # Run linting checks
 vx just lint
@@ -315,17 +481,107 @@ vx just lint-fix
 vx just prek-all
 ```
 
-## Documentation
+## Example Usage
 
-Full documentation is available at [loonghao.github.io/dcc-mcp-core](https://loonghao.github.io/dcc-mcp-core/).
+### Discovering and Loading Actions
 
-- [What is DCC-MCP-Core?](https://loonghao.github.io/dcc-mcp-core/guide/what-is-dcc-mcp-core)
-- [Getting Started](https://loonghao.github.io/dcc-mcp-core/guide/getting-started)
-- [Actions & Registry](https://loonghao.github.io/dcc-mcp-core/guide/actions)
-- [Event System](https://loonghao.github.io/dcc-mcp-core/guide/events)
-- [Skills System](https://loonghao.github.io/dcc-mcp-core/guide/skills)
-- [MCP Protocols](https://loonghao.github.io/dcc-mcp-core/guide/protocols)
-- [API Reference](https://loonghao.github.io/dcc-mcp-core/api/models)
+```python
+from dcc_mcp_core.actions.manager import ActionManager
+
+# Create an action manager for Maya (without loading from environment)
+manager = ActionManager('maya', load_env_paths=False)
+
+# Register action paths
+manager.register_action_path('/path/to/actions')
+
+# Refresh actions (discover and load)
+manager.refresh_actions()
+
+# Get information about all registered actions
+actions_info = manager.get_actions_info()
+
+# Print information about available actions
+for action_name, action_info in actions_info.items():
+    print(f"Action: {action_name}")
+    print(f"  Description: {action_info['description']}")
+    print(f"  Tags: {', '.join(action_info['tags'])}")
+
+# Call an action with parameters
+result = manager.call_action(
+    'create_sphere',
+    radius=2.0,
+    position=[0, 1, 0],
+    name='my_sphere'
+)
+
+# Access the result
+if result.success:
+    print(f"Success: {result.message}")
+    print(f"Created object: {result.context.get('object_name')}")
+    if result.prompt:
+        print(f"Next step suggestion: {result.prompt}")
+else:
+    print(f"Error: {result.error}")
+```
+
+### Creating a Custom Action
+
+```python
+# my_maya_action.py
+from dcc_mcp_core.actions.base import Action
+from pydantic import Field, field_validator
+
+class CreateSphereAction(Action):
+    # Action metadata
+    name = "create_sphere"
+    description = "Creates a sphere in Maya"
+    tags = ["geometry", "creation"]
+    dcc = "maya"
+    order = 0
+
+    # Input parameters model with validation
+    class InputModel(Action.InputModel):
+        radius: float = Field(1.0, description="Radius of the sphere")
+        position: list[float] = Field([0, 0, 0], description="Position of the sphere")
+        name: str = Field(None, description="Name of the sphere")
+
+        # Parameter validation
+        @field_validator('radius')
+        def validate_radius(cls, v):
+            if v <= 0:
+                raise ValueError("Radius must be positive")
+            return v
+
+    # Output data model
+    class OutputModel(Action.OutputModel):
+        object_name: str = Field(description="Name of the created object")
+        position: list[float] = Field(description="Final position of the object")
+
+    def _execute(self) -> None:
+        # Access validated input parameters
+        radius = self.input.radius
+        position = self.input.position
+        name = self.input.name or f"sphere_{radius}"
+
+        # Access DCC context (e.g., Maya cmds)
+        cmds = self.context.get("cmds")
+
+        try:
+            # Execute DCC-specific operation
+            sphere = cmds.polySphere(r=radius, n=name)[0]
+            cmds.move(*position, sphere)
+
+            # Set structured output
+            self.output = self.OutputModel(
+                object_name=sphere,
+                position=position,
+                prompt="You can now modify the sphere's attributes or add materials"
+            )
+        except Exception as e:
+            # Exceptions will be caught by the Action.process method
+            # and converted to an appropriate ActionResultModel
+            raise Exception(f"Failed to create sphere: {str(e)}") from e
+```
 
 ## Release Process
 
@@ -338,6 +594,8 @@ This project uses [Release Please](https://github.com/googleapis/release-please)
 
 ### Commit Message Format
 
+This project follows [Conventional Commits](https://www.conventionalcommits.org/):
+
 | Prefix | Description | Version Bump |
 |--------|-------------|--------------|
 | `feat:` | New feature | Minor (`0.x.0`) |
@@ -348,6 +606,26 @@ This project uses [Release Please](https://github.com/googleapis/release-please)
 | `ci:` | CI/CD changes | No release |
 | `refactor:` | Code refactoring | No release |
 | `test:` | Adding tests | No release |
+
+### Examples
+
+```bash
+# Feature (bumps minor version)
+git commit -m "feat: add batch action execution support"
+
+# Bug fix (bumps patch version)
+git commit -m "fix: resolve middleware chain ordering issue"
+
+# Breaking change (bumps major version)
+git commit -m "feat!: redesign Action base class API"
+
+# Scoped commit
+git commit -m "feat(skills): add PowerShell script support"
+
+# No release trigger
+git commit -m "docs: update API reference"
+git commit -m "ci: add Python 3.14 to test matrix"
+```
 
 ## Contributing
 
