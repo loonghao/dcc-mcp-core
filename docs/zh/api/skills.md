@@ -1,37 +1,11 @@
 # Skills API
 
-## SkillScanner
-
-技能包目录扫描器，支持基于修改时间的缓存。
+详见 [英文 API 文档](/api/skills) 获取完整参考。
 
 ```python
-from dcc_mcp_core import SkillScanner
+from dcc_mcp_core.skills import SkillScanner, load_skill
 
 scanner = SkillScanner()
 skill_dirs = scanner.scan(extra_paths=["/my/skills"], dcc_name="maya")
-scanner.clear_cache()
+actions = load_skill("/path/to/skill", dcc_name="maya")
 ```
-
-## 函数
-
-### parse_skill_md
-
-```python
-from dcc_mcp_core import parse_skill_md
-
-metadata = parse_skill_md("/path/to/skill-dir")  # 返回 Optional[SkillMetadata]
-```
-
-### scan_skill_paths
-
-```python
-from dcc_mcp_core import scan_skill_paths
-
-dirs = scan_skill_paths(extra_paths=["/my/skills"], dcc_name="maya")
-```
-
-## 环境变量
-
-| 变量 | 说明 |
-|------|------|
-| `DCC_MCP_SKILL_PATHS` | 技能包搜索路径（Windows 用 `;`，Unix 用 `:`） |

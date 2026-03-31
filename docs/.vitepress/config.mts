@@ -39,10 +39,19 @@ export default defineConfig({
             {
               text: 'Core Concepts',
               items: [
-                { text: 'Actions & Registry', link: '/guide/actions' },
+                { text: 'Actions', link: '/guide/actions' },
+                { text: 'Action Manager', link: '/guide/action-manager' },
+                { text: 'Middleware', link: '/guide/middleware' },
                 { text: 'Event System', link: '/guide/events' },
                 { text: 'Skills System', link: '/guide/skills' },
                 { text: 'MCP Protocols', link: '/guide/protocols' },
+              ]
+            },
+            {
+              text: 'Advanced',
+              items: [
+                { text: 'Custom Actions', link: '/guide/custom-actions' },
+                { text: 'Function Adapters', link: '/guide/function-adapters' },
               ]
             },
           ],
@@ -52,6 +61,7 @@ export default defineConfig({
               items: [
                 { text: 'Models', link: '/api/models' },
                 { text: 'Actions', link: '/api/actions' },
+                { text: 'Middleware', link: '/api/middleware' },
                 { text: 'Events', link: '/api/events' },
                 { text: 'Skills', link: '/api/skills' },
                 { text: 'Protocols', link: '/api/protocols' },
@@ -90,10 +100,19 @@ export default defineConfig({
             {
               text: '核心概念',
               items: [
-                { text: 'Actions 与注册表', link: '/zh/guide/actions' },
+                { text: 'Actions 动作', link: '/zh/guide/actions' },
+                { text: 'Action Manager', link: '/zh/guide/action-manager' },
+                { text: '中间件', link: '/zh/guide/middleware' },
                 { text: '事件系统', link: '/zh/guide/events' },
                 { text: 'Skills 技能包', link: '/zh/guide/skills' },
                 { text: 'MCP 协议', link: '/zh/guide/protocols' },
+              ]
+            },
+            {
+              text: '进阶',
+              items: [
+                { text: '自定义 Action', link: '/zh/guide/custom-actions' },
+                { text: '函数适配器', link: '/zh/guide/function-adapters' },
               ]
             },
           ],
@@ -103,6 +122,7 @@ export default defineConfig({
               items: [
                 { text: '数据模型', link: '/zh/api/models' },
                 { text: 'Actions', link: '/zh/api/actions' },
+                { text: '中间件', link: '/zh/api/middleware' },
                 { text: '事件', link: '/zh/api/events' },
                 { text: 'Skills', link: '/zh/api/skills' },
                 { text: '协议', link: '/zh/api/protocols' },
@@ -132,7 +152,7 @@ export default defineConfig({
     ],
     footer: {
       message: 'Released under the MIT License.',
-      copyright: 'Copyright © 2025-2026 Hal Long'
+      copyright: 'Copyright © 2025 Hal Long'
     },
     search: {
       provider: 'local'

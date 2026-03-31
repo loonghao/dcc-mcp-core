@@ -4,7 +4,7 @@ layout: home
 hero:
   name: DCC-MCP-Core
   text: AI ↔ DCC Bridge
-  tagline: Foundational library for the DCC Model Context Protocol ecosystem. Rust-powered core with zero dependencies connecting AI with Maya, Blender, Houdini, and more.
+  tagline: Foundational library for the DCC Model Context Protocol ecosystem. Seamlessly connect AI with Maya, Blender, Houdini, and more.
   image:
     src: /logo.svg
     alt: DCC-MCP-Core
@@ -17,22 +17,22 @@ hero:
       link: https://github.com/loonghao/dcc-mcp-core
 
 features:
-  - icon: ⚡
-    title: Rust-Powered Core
-    details: All core logic implemented in Rust via PyO3. Zero Python runtime dependencies, maximum performance.
   - icon: 🎯
-    title: ActionRegistry
-    details: Thread-safe action registration and lookup using DashMap for lock-free concurrent reads.
+    title: Class-Based Actions
+    details: Define operations with Pydantic models for strong typing, input validation, and structured output.
+  - icon: ⚡
+    title: Zero Dependencies
+    details: Pure Python 3.8+ with zero third-party dependencies. Rust-powered core via PyO3 for maximum performance.
   - icon: 🔌
     title: Skills System
     details: Register any script (Python, MEL, MaxScript, BAT, Shell) as MCP tools with zero code via SKILL.md.
-  - icon: 📡
-    title: EventBus
-    details: Thread-safe publish/subscribe event system for decoupled component communication.
+  - icon: 🧩
+    title: Middleware & Events
+    details: Chain-of-responsibility middleware and publish/subscribe event system for extensible action processing.
   - icon: 🌐
-    title: MCP Protocol Types
-    details: Full MCP protocol type definitions for Tools, Resources, and Prompts abstractions.
+    title: MCP Protocol Layer
+    details: Full MCP Server protocol with Tools, Resources, and Prompts abstractions for AI-DCC integration.
   - icon: 🔄
-    title: Type Wrappers
-    details: RPyC-compatible type wrappers ensuring type safety in remote procedure calls.
+    title: Async Support
+    details: Both synchronous and asynchronous action execution with native async override capability.
 ---

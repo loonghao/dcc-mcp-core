@@ -1,94 +1,81 @@
-# Actions 与注册表
+# Actions 动作
 
-**ActionRegistry** 是 DCC-MCP-Core 中管理动作元数据的核心组件。它提供线程安全的注册、查询和列举功能。
+Actions 是 DCC-MCP-Core 的核心构建块。每个 Action 代表一个可以在 DCC 应用程序中执行的离散操作。
 
-## ActionRegistry
+## Action 基类
 
-`ActionRegistry` 使用 Rust 的 `DashMap` 实现无锁并发读取。每个注册表实例独立运作，避免跨 DCC 污染。
-
-```python
-from dcc_mcp_core import ActionRegistry
-
-# 创建新注册表
-registry = ActionRegistry()
-
-# 注册动作
-registry.register(
-    name="create_sphere",
-    description="在场景中创建球体",
-    category="geometry",
-    tags=["geometry", "creation"],
-    dcc="maya",
-    version="1.0.0",
-    input_schema='{"type": "object", "properties": {"radius": {"type": "number"}}}',
-    output_schema='{"type": "object", "properties": {"name": {"type": "string"}}}',
-    source_file="/path/to/action.py",
-)
-```
-
-## 注册参数
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `name` | `str` | — | 动作名称（用于查询） |
-| `description` | `str` | `""` | 动作描述 |
-| `category` | `str` | `""` | 分类 |
-| `tags` | `List[str]` | `[]` | 标签 |
-| `dcc` | `str` | `"python"` | 目标 DCC |
-| `version` | `str` | `"1.0.0"` | 版本 |
-| `input_schema` | `Optional[str]` | `None` | 输入 JSON Schema 字符串 |
-| `output_schema` | `Optional[str]` | `None` | 输出 JSON Schema 字符串 |
-| `source_file` | `Optional[str]` | `None` | 源文件路径 |
-
-## 查询动作
+Actions 继承自 `Action` 基类，使用 Pydantic 模型提供标准化结构：
 
 ```python
-# 获取动作元数据（返回 dict 或 None）
-meta = registry.get_action("create_sphere")
-meta = registry.get_action("create_sphere", dcc_name="maya")
+from dcc_mcp_core.actions.base import Action
+from pydantic import Field, field_validator, model_validator
+from typing import List, Optional
 
-# 列出指定 DCC 的所有动作名称
-names = registry.list_actions_for_dcc("maya")
+class CreateSphereAction(Action):
+    # 元数据
+    name = "create_sphere"
+    description = "在场景中创建球体"
+    tags = ["几何体", "创建"]
+    dcc = "maya"
+    order = 0
 
-# 列出所有动作及完整元数据
-all_actions = registry.list_actions()
-maya_actions = registry.list_actions(dcc_name="maya")
+    # 带验证的输入参数模型
+    class InputModel(Action.InputModel):
+        radius: float = Field(default=1.0, description="球体半径")
+        position: List[float] = Field(default=[0, 0, 0], description="位置")
+        name: Optional[str] = Field(default=None, description="球体名称")
 
-# 获取所有已注册 DCC 名称
-dccs = registry.get_all_dccs()
+        @field_validator('radius')
+        def validate_radius(cls, v):
+            if v <= 0:
+                raise ValueError("半径必须为正数")
+            return v
 
-# 注册表信息
-print(len(registry))  # 已注册动作数量
+    # 输出数据模型
+    class OutputModel(Action.OutputModel):
+        object_name: str = Field(description="创建的对象名称")
+        position: List[float] = Field(description="最终位置")
+
+    def _execute(self) -> None:
+        radius = self.input.radius
+        position = self.input.position
+        name = self.input.name or f"sphere_{radius}"
+
+        cmds = self.context.get("cmds")
+        sphere = cmds.polySphere(r=radius, n=name)[0]
+        cmds.move(*position, sphere)
+
+        self.output = self.OutputModel(
+            object_name=sphere,
+            position=position,
+            prompt="现在可以修改球体属性或添加材质"
+        )
 ```
 
-## ActionResultModel
+## 类属性
 
-所有动作执行应返回 `ActionResultModel`：
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `name` | `str` | 动作名称（用于注册和查找） |
+| `description` | `str` | 动作描述 |
+| `tags` | `List[str]` | 分类标签 |
+| `dcc` | `str` | 目标 DCC |
+| `order` | `int` | 执行优先级（越小越先） |
+| `category` | `str` | 组织分类 |
+| `abstract` | `bool` | 为 `True` 时不注册 |
 
-```python
-from dcc_mcp_core import ActionResultModel, success_result, error_result
+## 生命周期
 
-# 直接构造
-result = ActionResultModel(
-    success=True,
-    message="已创建球体",
-    prompt="现在可以修改球体属性",
-    context={"object_name": "sphere1"},
-)
-
-# 工厂函数（推荐）
-result = success_result("已创建球体", prompt="修改属性", object_name="sphere1")
-error = error_result("失败", "文件未找到", prompt="检查路径")
-
-# 访问字段
-print(result.success)    # True
-print(result.message)    # "已创建球体"
-print(result.context)    # {"object_name": "sphere1"}
-
-# 创建修改后的副本
-with_err = result.with_error("出错了")
-with_ctx = result.with_context(extra_data="value")
-
-# 序列化
-d = result.to_dict()
 ```
+__init__(context) → setup(**kwargs) → process() → ActionResultModel
+```
+
+## 关键方法
+
+| 方法 | 说明 |
+|------|------|
+| `setup(**kwargs)` | 验证输入，支持链式调用 |
+| `process()` | 同步执行 → `ActionResultModel` |
+| `process_async()` | 异步执行 → `ActionResultModel` |
+| `_execute()` | **必须实现** — 核心逻辑 |
+| `_execute_async()` | 重写以支持原生异步 |

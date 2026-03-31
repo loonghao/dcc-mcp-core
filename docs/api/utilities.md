@@ -1,101 +1,105 @@
 # Utilities API
 
-Utility functions and types provided by the `dcc-mcp-utils` Rust crate.
+`dcc_mcp_core.utils`
+
+## Decorators
+
+```python
+from dcc_mcp_core.utils.decorators import error_handler, with_context
+
+@error_handler
+def risky_operation(data):
+    # Always returns ActionResultModel, catches all exceptions
+    return {"processed": True}
+
+@with_context()
+def process(data, context):
+    # context defaults to {} if not provided
+    pass
+```
 
 ## Type Wrappers (RPyC)
 
-Type wrappers ensure RPyC remote calls preserve Python type information:
-
 ```python
-from dcc_mcp_core import (
-    wrap_value, unwrap_value, unwrap_parameters,
+from dcc_mcp_core.utils.type_wrappers import (
+    wrap_value, unwrap_value, wrap_boolean_parameters, unwrap_parameters,
     BooleanWrapper, IntWrapper, FloatWrapper, StringWrapper,
 )
 
-# Wrap a value
-wrapped = wrap_value(True)          # BooleanWrapper(True)
-wrapped = wrap_value(42)            # IntWrapper(42)
-wrapped = wrap_value(3.14)          # FloatWrapper(3.14)
-wrapped = wrap_value("hello")       # StringWrapper("hello")
+wrapped = wrap_value(True)         # BooleanWrapper(True)
+original = unwrap_value(wrapped)   # True
 
-# Unwrap a value
-original = unwrap_value(wrapped)    # True / 42 / 3.14 / "hello"
-
-# Unwrap all values in a dict
-params = {"visible": BooleanWrapper(True), "count": IntWrapper(5)}
-unwrapped = unwrap_parameters(params)  # {"visible": True, "count": 5}
+params = {"visible": True, "count": 5}
+wrapped_params = wrap_boolean_parameters(params)
+original_params = unwrap_parameters(wrapped_params)
 ```
 
-### Wrapper Classes
+## Module Loading
 
-| Class | Wrapped Type | Special Methods |
-|-------|-------------|-----------------|
-| `BooleanWrapper(value)` | `bool` | `__bool__`, `__eq__` |
-| `IntWrapper(value)` | `int` | `__int__`, `__index__` |
-| `FloatWrapper(value)` | `float` | `__float__` |
-| `StringWrapper(value)` | `str` | `__str__` |
+```python
+from dcc_mcp_core.utils.module_loader import load_module_from_path, append_to_python_path
 
-All wrappers have a `.value` property and `__repr__`.
+module = load_module_from_path(
+    "/path/to/action.py",
+    dependencies={"cmds": maya_cmds},
+    dcc_name="maya"
+)
+
+with append_to_python_path("/path/to/script.py"):
+    import my_script
+```
 
 ## Filesystem
 
-Platform-specific directory utilities, replacing `platformdirs` with the Rust `dirs` crate:
-
 ```python
-from dcc_mcp_core import (
-    get_platform_dir,
-    get_config_dir, get_data_dir, get_log_dir,
-    get_actions_dir, get_skills_dir,
-    get_skill_paths_from_env,
+from dcc_mcp_core.utils.filesystem import (
+    get_config_dir, get_data_dir, get_log_dir, get_actions_dir,
+    get_skills_dir, get_skill_paths_from_env, get_actions_paths_from_env,
 )
 
-# Generic platform directory
-config = get_platform_dir("config")    # ~/.config/dcc-mcp (Linux)
-data = get_platform_dir("data")        # ~/.local/share/dcc-mcp (Linux)
-cache = get_platform_dir("cache")      # ~/.cache/dcc-mcp (Linux)
-
-# Convenience functions
-config_dir = get_config_dir()          # Platform config directory
-data_dir = get_data_dir()              # Platform data directory
-log_dir = get_log_dir()                # .../dcc-mcp/log/
-
-# DCC-specific directories
-actions = get_actions_dir("maya")      # .../dcc-mcp/actions/maya/
-skills = get_skills_dir("maya")        # .../dcc-mcp/skills/maya/
-skills_global = get_skills_dir()       # .../dcc-mcp/skills/
-
-# Environment paths
-paths = get_skill_paths_from_env()     # From DCC_MCP_SKILL_PATHS
+config = get_config_dir()           # Platform-specific config directory
+actions = get_actions_dir("maya")   # .../data/actions/maya/
+skills = get_skills_dir("maya")     # .../data/skills/maya/
+env_paths = get_skill_paths_from_env()  # from DCC_MCP_SKILL_PATHS
 ```
 
-### Supported `get_platform_dir` Types
-
-| Type | Description |
-|------|-------------|
-| `"config"` | User configuration directory |
-| `"data"` | User data directory |
-| `"cache"` | User cache directory |
-| `"log"` / `"state"` | Local data directory |
-| `"documents"` | User documents directory |
-
-## Constants
+## Dependency Injection
 
 ```python
-from dcc_mcp_core import (
-    APP_NAME,            # "dcc-mcp"
-    APP_AUTHOR,          # "dcc-mcp"
-    DEFAULT_DCC,         # "python"
-    DEFAULT_LOG_LEVEL,   # "DEBUG"
-    ENV_LOG_LEVEL,       # "MCP_LOG_LEVEL"
-    ENV_SKILL_PATHS,     # "DCC_MCP_SKILL_PATHS"
-    SKILL_METADATA_FILE, # "SKILL.md"
-    SKILL_SCRIPTS_DIR,   # "scripts"
+from dcc_mcp_core.utils.dependency_injector import inject_dependencies
+
+inject_dependencies(
+    module,
+    {"cmds": maya_cmds},
+    inject_core_modules=True,
+    dcc_name="maya"
 )
+# module.cmds == maya_cmds
+# module.DCC_NAME == "maya"
 ```
 
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `DCC_MCP_SKILL_PATHS` | Skill search paths (platform path separator) |
-| `MCP_LOG_LEVEL` | Log level for tracing (e.g., `"debug"`, `"info"`, `"warn"`) |
+| `DCC_MCP_ACTION_PATHS` | Action search paths |
+| `DCC_MCP_ACTION_PATH_{DCC}` | DCC-specific action paths (e.g., `DCC_MCP_ACTION_PATH_MAYA`) |
+| `DCC_MCP_SKILL_PATHS` | Skill search paths |
+| `DCC_MCP_ACTIONS_DIR` | Generic actions directory |
+
+## Exceptions
+
+`dcc_mcp_core.utils.exceptions`
+
+| Exception | Description |
+|-----------|-------------|
+| `MCPError` | Base exception |
+| `ConfigurationError` | Configuration issues |
+| `ConnectionError` | Connection issues |
+| `OperationError` | Operation failures |
+| `ValidationError` | General validation errors |
+| `ParameterValidationError` | Parameter validation errors |
+| `VersionError` | Version compatibility errors |
+| `ActionError` | Base action error (has `action_name`, `action_class`) |
+| `ActionParameterError` | Parameter validation (has `parameter_name`) |
+| `ActionExecutionError` | Execution failure (has `execution_phase`, `traceback`) |

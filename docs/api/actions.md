@@ -1,67 +1,72 @@
 # Actions API
 
-## ActionRegistry
+## Action Base Class
 
-`dcc_mcp_core.ActionRegistry` — Thread-safe action registry, implemented in Rust using DashMap.
+`dcc_mcp_core.actions.base.Action`
+
+### Class Attributes
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `name` | `str` | Action name |
+| `description` | `str` | Description |
+| `tags` | `List[str]` | Tags |
+| `dcc` | `str` | Target DCC |
+| `order` | `int` | Priority (lower = first) |
+| `category` | `str` | Category |
+| `abstract` | `bool` | If `True`, not registered |
+
+### Inner Classes
+
+- `InputModel(Action.InputModel)` — Define input parameters
+- `OutputModel(Action.OutputModel)` — Define structured output
+
+### Methods
+
+- `setup(**kwargs) -> Action` — Validate input, chainable
+- `validate_input(**kwargs) -> InputModel`
+- `process() -> ActionResultModel` — Sync execute
+- `process_async() -> ActionResultModel` — Async execute
+- `_execute() -> None` — **Must implement**
+- `_execute_async() -> None` — Override for native async
+
+## ActionManager
+
+`dcc_mcp_core.actions.manager.ActionManager`
+
+### Factory Functions
 
 ```python
-from dcc_mcp_core import ActionRegistry
-```
-
-### Constructor
-
-```python
-registry = ActionRegistry()
+create_action_manager(dcc_name, ...) -> ActionManager  # always new
+get_action_manager(dcc_name, ...) -> ActionManager      # cached singleton
 ```
 
 ### Methods
 
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `register(name, ...)` | `bool` | Register an action with metadata |
-| `get_action(name, dcc_name=None)` | `Optional[dict]` | Get action metadata by name |
-| `list_actions(dcc_name=None)` | `List[dict]` | List all actions with full metadata |
-| `list_actions_for_dcc(dcc_name)` | `List[str]` | List action names for a specific DCC |
-| `get_all_dccs()` | `List[str]` | List all registered DCC names |
-| `reset()` | `None` | Clear all registered actions |
-| `len(registry)` | `int` | Number of registered actions |
+- `discover_actions_from_path(path)`
+- `discover_actions_from_package(package_name)`
+- `refresh_actions(force=True)`
+- `call_action(name, **kwargs) -> ActionResultModel`
+- `call_action_async(name, **kwargs) -> ActionResultModel`
+- `get_actions_info() -> ActionResultModel`
+- `list_available_actions() -> List[str]`
+- `add_middleware(cls, **kwargs)`
 
-### register()
+## ActionRegistry
 
-```python
-registry.register(
-    name="create_sphere",
-    description="Creates a sphere",
-    category="geometry",
-    tags=["geometry", "creation"],
-    dcc="maya",
-    version="1.0.0",
-    input_schema='{"type": "object", "properties": {}}',   # JSON string
-    output_schema='{"type": "object", "properties": {}}',   # JSON string
-    source_file="/path/to/action.py",
-)
-```
+`dcc_mcp_core.actions.registry.ActionRegistry` (singleton)
 
-### get_action()
+### Methods
 
-Returns a dict with action metadata, or `None` if not found:
+- `register(action_class) -> bool`
+- `get_action(name, dcc_name=None) -> Optional[Type[Action]]`
+- `list_actions(dcc_name=None, tag=None) -> List[Dict]`
+- `get_actions_by_dcc(dcc_name) -> Dict[str, Type[Action]]`
+- `get_all_dccs() -> List[str]`
 
-```python
-meta = registry.get_action("create_sphere")           # Global lookup
-meta = registry.get_action("create_sphere", dcc_name="maya")  # DCC-specific
-```
+## Function Adapters
 
-### Action Metadata Dict Keys
+`dcc_mcp_core.actions.function_adapter`
 
-| Key | Type | Description |
-|-----|------|-------------|
-| `name` | `str` | Action name |
-| `internal_name` | `str` | Internal name (same as name) |
-| `description` | `str` | Description |
-| `category` | `str` | Category |
-| `tags` | `List[str]` | Tags |
-| `dcc` | `str` | Target DCC |
-| `version` | `str` | Version |
-| `input_schema` | `str` | JSON Schema string |
-| `output_schema` | `str` | JSON Schema string |
-| `source_file` | `Optional[str]` | Source file path |
+- `create_function_adapter(action_name, dcc_name=None) -> Callable`
+- `create_function_adapters(dcc_name=None, manager=None) -> Dict[str, Callable]`

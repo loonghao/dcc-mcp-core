@@ -4,7 +4,7 @@ layout: home
 hero:
   name: DCC-MCP-Core
   text: AI ↔ DCC 桥梁
-  tagline: DCC 模型上下文协议生态系统的基础库。Rust 驱动核心，零依赖连接 AI 与 Maya、Blender、Houdini 等。
+  tagline: DCC 模型上下文协议生态系统的基础库。无缝连接 AI 与 Maya、Blender、Houdini 等 DCC 软件。
   image:
     src: /logo.svg
     alt: DCC-MCP-Core
@@ -13,26 +13,26 @@ hero:
       text: 快速开始
       link: /zh/guide/getting-started
     - theme: alt
-      text: GitHub
+      text: 在 GitHub 上查看
       link: https://github.com/loonghao/dcc-mcp-core
 
 features:
-  - icon: ⚡
-    title: Rust 驱动核心
-    details: 所有核心逻辑由 Rust 通过 PyO3 实现，零 Python 运行时依赖，极致性能。
   - icon: 🎯
-    title: ActionRegistry
-    details: 线程安全的动作注册与查询，基于 DashMap 的无锁并发读取。
+    title: 基于类的 Action 设计
+    details: 使用 Pydantic 模型定义操作，提供强类型检查、输入验证和结构化输出。
+  - icon: ⚡
+    title: 零依赖
+    details: 纯 Python 3.8+ 实现，零第三方依赖。通过 PyO3 提供 Rust 驱动的高性能核心。
   - icon: 🔌
-    title: Skills 技能包
-    details: 将任何脚本（Python、MEL、MaxScript、BAT、Shell）零代码注册为 MCP 工具。
-  - icon: 📡
-    title: EventBus 事件总线
-    details: 线程安全的发布/订阅事件系统，实现组件间解耦通信。
+    title: Skills 技能包系统
+    details: 通过 SKILL.md 零代码将任何脚本（Python、MEL、MaxScript、BAT、Shell）注册为 MCP 工具。
+  - icon: 🧩
+    title: 中间件 & 事件系统
+    details: 责任链模式的中间件和发布/订阅事件系统，提供可扩展的动作处理机制。
   - icon: 🌐
-    title: MCP 协议类型
-    details: 完整的 MCP 协议类型定义：Tools、Resources、Prompts。
+    title: MCP 协议层
+    details: 完整的 MCP Server 协议实现，包含 Tools、Resources 和 Prompts 抽象层。
   - icon: 🔄
-    title: 类型包装器
-    details: RPyC 兼容的类型包装器，确保远程调用中的类型安全。
+    title: 异步支持
+    details: 同时支持同步和异步动作执行，并提供原生异步重写能力。
 ---
