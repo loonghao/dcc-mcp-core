@@ -18,7 +18,7 @@ use crate::types::{ActionMetrics, ExporterBackend, LogFormat, TelemetryConfig};
 // ── PyActionMetrics ───────────────────────────────────────────────────────────
 
 /// Read-only snapshot of per-Action performance metrics.
-#[pyclass(name = "ActionMetrics")]
+#[pyclass(name = "ActionMetrics", from_py_object)]
 #[derive(Clone)]
 pub struct PyActionMetrics {
     inner: ActionMetrics,

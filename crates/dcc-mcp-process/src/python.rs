@@ -181,6 +181,12 @@ impl PyProcessMonitor {
     }
 }
 
+impl Default for PyProcessMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // ── PyDccLauncher ─────────────────────────────────────────────────────────────
 
 /// Async DCC process launcher (spawn / terminate / kill).
@@ -287,6 +293,12 @@ impl PyDccLauncher {
 
     pub fn __repr__(&self) -> String {
         format!("PyDccLauncher(running={})", self.inner.running_count())
+    }
+}
+
+impl Default for PyDccLauncher {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -61,7 +61,7 @@ use super::types::PyTransportAddress;
 #[pyclass(name = "IpcListener")]
 pub struct PyIpcListener {
     inner: Option<IpcListener>,
-    runtime: tokio::runtime::Runtime,
+    _runtime: tokio::runtime::Runtime,
 }
 
 #[cfg(feature = "python-bindings")]
@@ -91,7 +91,7 @@ impl PyIpcListener {
 
         Ok(Self {
             inner: Some(inner),
-            runtime,
+            _runtime: runtime,
         })
     }
 
@@ -133,6 +133,7 @@ impl PyIpcListener {
     ///
     /// Raises:
     ///     RuntimeError: If called more than once.
+    #[allow(clippy::wrong_self_convention)]
     fn into_handle(&mut self) -> PyResult<PyListenerHandle> {
         let inner = self.inner.take().ok_or_else(|| {
             pyo3::exceptions::PyRuntimeError::new_err("listener has already been consumed")
@@ -147,7 +148,7 @@ impl PyIpcListener {
 
         Ok(PyListenerHandle {
             inner: handle,
-            runtime,
+            _runtime: runtime,
         })
     }
 
@@ -241,7 +242,7 @@ impl PyIpcListener {
 #[pyclass(name = "ListenerHandle")]
 pub struct PyListenerHandle {
     inner: ListenerHandle,
-    runtime: tokio::runtime::Runtime,
+    _runtime: tokio::runtime::Runtime,
 }
 
 #[cfg(feature = "python-bindings")]

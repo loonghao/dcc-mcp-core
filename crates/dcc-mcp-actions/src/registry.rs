@@ -46,7 +46,10 @@ pub struct ActionMeta {
 ///
 /// Unlike the Python singleton, each ActionManager can own its own registry,
 /// eliminating cross-DCC pollution.
-#[cfg_attr(feature = "python-bindings", pyclass(name = "ActionRegistry"))]
+#[cfg_attr(
+    feature = "python-bindings",
+    pyclass(name = "ActionRegistry", from_py_object)
+)]
 #[derive(Debug, Clone)]
 pub struct ActionRegistry {
     /// Main registry: action_name → ActionMeta

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "python-bindings",
-    pyclass(name = "SkillMetadata", eq, get_all, set_all)
+    pyclass(name = "SkillMetadata", eq, get_all, set_all, from_py_object)
 )]
 pub struct SkillMetadata {
     pub name: String,
@@ -58,6 +58,7 @@ fn default_version() -> String {
 impl SkillMetadata {
     #[new]
     #[pyo3(signature = (name, description="".to_string(), tools=vec![], dcc=DEFAULT_DCC.to_string(), tags=vec![], scripts=vec![], skill_path="".to_string(), version=DEFAULT_VERSION.to_string(), depends=vec![], metadata_files=vec![]))]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         name: String,
         description: String,

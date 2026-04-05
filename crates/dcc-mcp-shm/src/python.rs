@@ -167,7 +167,7 @@ impl PyBufferPool {
 // ── PySceneDataKind ───────────────────────────────────────────────────────────
 
 /// Kind of DCC scene data stored in a shared scene buffer.
-#[pyclass(name = "PySceneDataKind", eq, eq_int)]
+#[pyclass(name = "PySceneDataKind", eq, eq_int, from_py_object)]
 #[derive(Clone, PartialEq)]
 pub enum PySceneDataKind {
     Geometry = 0,

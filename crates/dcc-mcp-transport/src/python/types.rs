@@ -28,7 +28,7 @@ use crate::routing::RoutingStrategy;
 /// print(status)  # "AVAILABLE"
 /// ```
 #[cfg(feature = "python-bindings")]
-#[pyclass(name = "ServiceStatus", eq)]
+#[pyclass(name = "ServiceStatus", eq, from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PyServiceStatus {
     /// Service is available and accepting connections.
@@ -88,7 +88,7 @@ impl From<ServiceStatus> for PyServiceStatus {
 /// )
 /// ```
 #[cfg(feature = "python-bindings")]
-#[pyclass(name = "RoutingStrategy", eq)]
+#[pyclass(name = "RoutingStrategy", eq, from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PyRoutingStrategy {
     /// Route to the first available (healthy) instance.
@@ -173,7 +173,7 @@ impl From<&PyRoutingStrategy> for RoutingStrategy {
 /// print(str(addr))        # "tcp://127.0.0.1:18812"
 /// ```
 #[cfg(feature = "python-bindings")]
-#[pyclass(name = "TransportAddress")]
+#[pyclass(name = "TransportAddress", from_py_object)]
 #[derive(Debug, Clone)]
 pub struct PyTransportAddress {
     pub(super) inner: TransportAddress,
@@ -337,7 +337,7 @@ impl From<&PyTransportAddress> for TransportAddress {
 /// scheme = TransportScheme.PREFER_IPC    # Prefer IPC, fallback to TCP
 /// ```
 #[cfg(feature = "python-bindings")]
-#[pyclass(name = "TransportScheme", eq)]
+#[pyclass(name = "TransportScheme", eq, from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PyTransportScheme {
     /// Automatically select the best transport based on locality.
@@ -428,7 +428,7 @@ impl From<&PyTransportScheme> for TransportScheme {
 /// print(entry.status)        # ServiceStatus.AVAILABLE
 /// ```
 #[cfg(feature = "python-bindings")]
-#[pyclass(name = "ServiceEntry", get_all)]
+#[pyclass(name = "ServiceEntry", get_all, from_py_object)]
 #[derive(Debug, Clone)]
 pub struct PyServiceEntry {
     /// DCC application type (e.g. "maya", "houdini", "blender").

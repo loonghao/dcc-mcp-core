@@ -24,7 +24,10 @@ type SubscriberMap = Arc<DashMap<String, Vec<(SubscriberId, Py<PyAny>)>>>;
 type SubscriberMap = Arc<DashMap<String, Vec<(SubscriberId, EventCallback)>>>;
 
 /// Thread-safe event bus.
-#[cfg_attr(feature = "python-bindings", pyclass(name = "EventBus"))]
+#[cfg_attr(
+    feature = "python-bindings",
+    pyclass(name = "EventBus", from_py_object)
+)]
 #[derive(Clone)]
 pub struct EventBus {
     next_id: Arc<AtomicU64>,

@@ -53,7 +53,10 @@ use crate::registry::ActionMeta;
 /// Only the numeric components are considered; pre-release labels (e.g. `-alpha`)
 /// are stripped and ignored for comparison purposes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "python-bindings", pyclass(name = "SemVer", get_all))]
+#[cfg_attr(
+    feature = "python-bindings",
+    pyclass(name = "SemVer", get_all, from_py_object)
+)]
 pub struct SemVer {
     pub major: u64,
     pub minor: u64,
@@ -329,7 +332,10 @@ type VersionKey = (String, String);
 /// Older versions are kept until explicitly removed, enabling backward-compatible
 /// resolution through the [`CompatibilityRouter`].
 #[derive(Debug, Default, Clone)]
-#[cfg_attr(feature = "python-bindings", pyclass(name = "VersionedRegistry"))]
+#[cfg_attr(
+    feature = "python-bindings",
+    pyclass(name = "VersionedRegistry", from_py_object)
+)]
 pub struct VersionedRegistry {
     /// `(action_name, dcc_name)` → sorted list of `(SemVer, ActionMeta)`
     store: HashMap<VersionKey, Vec<(SemVer, ActionMeta)>>,

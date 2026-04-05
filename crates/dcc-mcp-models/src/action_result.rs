@@ -82,7 +82,10 @@ impl ActionResultModelData {
 }
 
 /// Python-facing ActionResultModel.
-#[cfg_attr(feature = "python-bindings", pyclass(name = "ActionResultModel", eq))]
+#[cfg_attr(
+    feature = "python-bindings",
+    pyclass(name = "ActionResultModel", eq, from_py_object)
+)]
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ActionResultModel {
     pub(crate) inner: ActionResultModelData,
@@ -151,6 +154,7 @@ impl ActionResultModel {
     }
 
     /// Create a new instance with error information.
+    #[allow(clippy::double_must_use)]
     #[must_use]
     fn with_error(&self, error: String) -> Self {
         let mut data = self.inner.clone();
@@ -160,6 +164,7 @@ impl ActionResultModel {
     }
 
     /// Create a new instance with updated context.
+    #[allow(clippy::double_must_use)]
     #[must_use]
     #[pyo3(signature = (**kwargs))]
     fn with_context(&self, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -421,7 +426,7 @@ mod py_factories {
             return Ok(arm);
         }
         // If dict, try to convert
-        if let Ok(dict) = result.downcast::<PyDict>() {
+        if let Ok(dict) = result.cast::<PyDict>() {
             return validate_from_dict(dict);
         }
         // Wrap as success

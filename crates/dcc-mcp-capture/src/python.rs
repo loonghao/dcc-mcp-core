@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 
 use crate::backend::mock::MockBackend;
 use crate::capturer::Capturer;
-use crate::types::{CaptureBackendKind, CaptureConfig, CaptureFormat, CaptureTarget};
+use crate::types::{CaptureConfig, CaptureFormat, CaptureTarget};
 
 // ── Error conversion ───────────────────────────────────────────────────────
 

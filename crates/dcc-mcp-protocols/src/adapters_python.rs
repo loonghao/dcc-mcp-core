@@ -29,7 +29,7 @@ use crate::adapters::{
 /// print(lang)  # "python"
 /// ```
 #[cfg(feature = "python-bindings")]
-#[pyclass(name = "ScriptLanguage", eq)]
+#[pyclass(name = "ScriptLanguage", eq, from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PyScriptLanguage {
     #[pyo3(name = "PYTHON")]
@@ -107,7 +107,7 @@ impl From<&PyScriptLanguage> for ScriptLanguage {
 
 /// Python-facing enum for DCC error codes.
 #[cfg(feature = "python-bindings")]
-#[pyclass(name = "DccErrorCode", eq)]
+#[pyclass(name = "DccErrorCode", eq, from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PyDccErrorCode {
     #[pyo3(name = "CONNECTION_FAILED")]
@@ -186,7 +186,7 @@ impl From<DccErrorCode> for PyDccErrorCode {
 /// print(info.dcc_type)  # "maya"
 /// ```
 #[cfg(feature = "python-bindings")]
-#[pyclass(name = "DccInfo", get_all)]
+#[pyclass(name = "DccInfo", get_all, from_py_object)]
 #[derive(Debug, Clone)]
 pub struct PyDccInfo {
     pub dcc_type: String,
@@ -257,7 +257,7 @@ impl From<&DccInfo> for PyDccInfo {
 
 /// Python-facing script execution result.
 #[cfg(feature = "python-bindings")]
-#[pyclass(name = "ScriptResult", get_all)]
+#[pyclass(name = "ScriptResult", get_all, from_py_object)]
 #[derive(Debug, Clone)]
 pub struct PyScriptResult {
     pub success: bool,
@@ -323,7 +323,7 @@ impl From<&ScriptResult> for PyScriptResult {
 
 /// Python-facing scene statistics.
 #[cfg(feature = "python-bindings")]
-#[pyclass(name = "SceneStatistics", get_all, set_all)]
+#[pyclass(name = "SceneStatistics", get_all, set_all, from_py_object)]
 #[derive(Debug, Clone, Default)]
 pub struct PySceneStatistics {
     pub object_count: u64,
@@ -390,7 +390,7 @@ impl From<&SceneStatistics> for PySceneStatistics {
 
 /// Python-facing scene information.
 #[cfg(feature = "python-bindings")]
-#[pyclass(name = "SceneInfo", get_all)]
+#[pyclass(name = "SceneInfo", get_all, from_py_object)]
 #[derive(Debug, Clone)]
 pub struct PySceneInfo {
     pub file_path: String,
@@ -475,7 +475,7 @@ impl From<&SceneInfo> for PySceneInfo {
 
 /// Python-facing DCC capabilities declaration.
 #[cfg(feature = "python-bindings")]
-#[pyclass(name = "DccCapabilities", get_all, set_all)]
+#[pyclass(name = "DccCapabilities", get_all, set_all, from_py_object)]
 #[derive(Debug, Clone)]
 pub struct PyDccCapabilities {
     pub script_languages: Vec<PyScriptLanguage>,
@@ -497,6 +497,7 @@ impl PyDccCapabilities {
         undo_redo=false, progress_reporting=false, file_operations=false,
         selection=false, extensions=None
     ))]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         script_languages: Vec<PyScriptLanguage>,
         scene_info: bool,
@@ -553,7 +554,7 @@ impl From<&DccCapabilities> for PyDccCapabilities {
 
 /// Python-facing DCC error.
 #[cfg(feature = "python-bindings")]
-#[pyclass(name = "DccError", get_all)]
+#[pyclass(name = "DccError", get_all, from_py_object)]
 #[derive(Debug, Clone)]
 pub struct PyDccError {
     pub code: PyDccErrorCode,
@@ -611,7 +612,7 @@ impl From<&DccError> for PyDccError {
 
 /// Python-facing capture/screenshot result.
 #[cfg(feature = "python-bindings")]
-#[pyclass(name = "CaptureResult", get_all)]
+#[pyclass(name = "CaptureResult", get_all, from_py_object)]
 #[derive(Debug, Clone)]
 pub struct PyCaptureResult {
     pub data: Vec<u8>,

@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "python-bindings",
-    pyclass(name = "ToolAnnotations", eq, get_all, set_all)
+    pyclass(name = "ToolAnnotations", eq, get_all, set_all, from_py_object)
 )]
 pub struct ToolAnnotations {
     pub title: Option<String>,
@@ -76,7 +76,7 @@ impl ToolAnnotations {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "python-bindings",
-    pyclass(name = "ToolDefinition", eq, get_all, set_all)
+    pyclass(name = "ToolDefinition", eq, get_all, set_all, from_py_object)
 )]
 pub struct ToolDefinition {
     pub name: String,
@@ -127,7 +127,7 @@ impl ToolDefinition {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "python-bindings",
-    pyclass(name = "ResourceAnnotations", get_all, set_all)
+    pyclass(name = "ResourceAnnotations", get_all, set_all, from_py_object)
 )]
 pub struct ResourceAnnotations {
     /// Describes who the intended audience is.
@@ -166,7 +166,7 @@ impl ResourceAnnotations {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "python-bindings",
-    pyclass(name = "ResourceDefinition", get_all, set_all)
+    pyclass(name = "ResourceDefinition", get_all, set_all, from_py_object)
 )]
 pub struct ResourceDefinition {
     pub uri: String,
@@ -219,7 +219,7 @@ impl ResourceDefinition {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "python-bindings",
-    pyclass(name = "ResourceTemplateDefinition", get_all, set_all)
+    pyclass(name = "ResourceTemplateDefinition", get_all, set_all, from_py_object)
 )]
 pub struct ResourceTemplateDefinition {
     #[serde(rename = "uriTemplate")]
@@ -270,7 +270,7 @@ impl ResourceTemplateDefinition {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "python-bindings",
-    pyclass(name = "PromptArgument", eq, get_all, set_all)
+    pyclass(name = "PromptArgument", eq, get_all, set_all, from_py_object)
 )]
 pub struct PromptArgument {
     pub name: String,
@@ -310,7 +310,7 @@ impl PromptArgument {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "python-bindings",
-    pyclass(name = "PromptDefinition", eq, get_all, set_all)
+    pyclass(name = "PromptDefinition", eq, get_all, set_all, from_py_object)
 )]
 pub struct PromptDefinition {
     pub name: String,

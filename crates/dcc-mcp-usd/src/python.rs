@@ -3,8 +3,6 @@
 //! Exposes `PyUsdStage`, `PyUsdPrim`, `PyUsdLayer`, `PySdfPath`, `PyVtValue`
 //! to Python as `dcc_mcp_core._core` classes.
 
-#![cfg(feature = "python-bindings")]
-
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;

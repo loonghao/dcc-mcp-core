@@ -25,7 +25,7 @@ fn sandbox_err_to_py(e: SandboxError) -> PyErr {
 // ── PyAuditEntry ──────────────────────────────────────────────────────────────
 
 /// Python representation of a single sandbox audit entry.
-#[pyclass(name = "AuditEntry")]
+#[pyclass(name = "AuditEntry", from_py_object)]
 #[derive(Clone)]
 pub struct PyAuditEntry {
     inner: AuditEntry,
@@ -97,7 +97,7 @@ impl PyAuditEntry {
 // ── PyAuditLog ────────────────────────────────────────────────────────────────
 
 /// Read-only Python view of the sandbox audit log.
-#[pyclass(name = "AuditLog")]
+#[pyclass(name = "AuditLog", from_py_object)]
 #[derive(Clone)]
 pub struct PyAuditLog {
     inner: AuditLog,

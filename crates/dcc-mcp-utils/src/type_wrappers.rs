@@ -11,7 +11,10 @@ use pyo3::prelude::*;
 const FLOAT_RELATIVE_TOLERANCE: f64 = 1e-9;
 
 /// Boolean wrapper for safe Python interop via PyO3.
-#[cfg_attr(feature = "python-bindings", pyclass(name = "BooleanWrapper"))]
+#[cfg_attr(
+    feature = "python-bindings",
+    pyclass(name = "BooleanWrapper", from_py_object)
+)]
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct BooleanWrapper {
     pub value: bool,
@@ -52,7 +55,10 @@ impl BooleanWrapper {
 }
 
 /// Integer wrapper for safe Python interop via PyO3.
-#[cfg_attr(feature = "python-bindings", pyclass(name = "IntWrapper"))]
+#[cfg_attr(
+    feature = "python-bindings",
+    pyclass(name = "IntWrapper", from_py_object)
+)]
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct IntWrapper {
     pub value: i64,
@@ -97,7 +103,10 @@ impl IntWrapper {
 /// Note: `FloatWrapper` intentionally does **not** implement `Eq` or `Hash`
 /// because `f64` is not `Eq`/`Hash` (NaN != NaN). Python users cannot put
 /// `FloatWrapper` instances into `set` or use them as `dict` keys.
-#[cfg_attr(feature = "python-bindings", pyclass(name = "FloatWrapper"))]
+#[cfg_attr(
+    feature = "python-bindings",
+    pyclass(name = "FloatWrapper", from_py_object)
+)]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FloatWrapper {
     pub value: f64,
@@ -143,7 +152,10 @@ impl FloatWrapper {
 }
 
 /// String wrapper for safe Python interop via PyO3.
-#[cfg_attr(feature = "python-bindings", pyclass(name = "StringWrapper"))]
+#[cfg_attr(
+    feature = "python-bindings",
+    pyclass(name = "StringWrapper", from_py_object)
+)]
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct StringWrapper {
     pub value: String,
