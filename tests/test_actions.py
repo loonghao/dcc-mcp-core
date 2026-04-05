@@ -133,6 +133,159 @@ class TestActionRegistry:
         assert "ActionRegistry" in repr(reg)
         assert "1" in repr(reg)
 
+    # ── search_actions ─────────────────────────────────────────────────────────
+
+    def test_search_actions_by_category(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="create_sphere", category="geometry", dcc="maya")
+        reg.register(name="delete_sphere", category="geometry", dcc="maya")
+        reg.register(name="export_fbx", category="export", dcc="maya")
+        results = reg.search_actions(category="geometry")
+        assert len(results) == 2
+        names = {r["name"] for r in results}
+        assert names == {"create_sphere", "delete_sphere"}
+
+    def test_search_actions_by_tag(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="create_sphere", tags=["create", "geo"], dcc="maya")
+        reg.register(name="delete_sphere", tags=["delete", "geo"], dcc="maya")
+        reg.register(name="export_fbx", tags=["export"], dcc="maya")
+        results = reg.search_actions(tags=["geo"])
+        assert len(results) == 2
+
+    def test_search_actions_by_multiple_tags(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1", tags=["create", "geo", "primitive"], dcc="maya")
+        reg.register(name="a2", tags=["create", "geo"], dcc="maya")
+        reg.register(name="a3", tags=["geo"], dcc="maya")
+        # AND filter: must have all tags
+        results = reg.search_actions(tags=["create", "primitive"])
+        assert len(results) == 1
+        assert results[0]["name"] == "a1"
+
+    def test_search_actions_by_category_and_tag(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1", category="geometry", tags=["create"], dcc="maya")
+        reg.register(name="a2", category="geometry", tags=["delete"], dcc="maya")
+        reg.register(name="a3", category="export", tags=["create"], dcc="maya")
+        results = reg.search_actions(category="geometry", tags=["create"])
+        assert len(results) == 1
+        assert results[0]["name"] == "a1"
+
+    def test_search_actions_by_dcc(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1", category="geometry", dcc="maya")
+        reg.register(name="a2", category="geometry", dcc="blender")
+        results = reg.search_actions(category="geometry", dcc_name="maya")
+        assert len(results) == 1
+        assert results[0]["name"] == "a1"
+
+    def test_search_actions_no_filter_returns_all(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1", dcc="maya")
+        reg.register(name="a2", dcc="blender")
+        results = reg.search_actions()
+        assert len(results) == 2
+
+    def test_search_actions_empty_category_returns_all(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1", category="geometry", dcc="maya")
+        reg.register(name="a2", category="export", dcc="maya")
+        # Empty string category should not filter
+        results = reg.search_actions(category="")
+        assert len(results) == 2
+
+    def test_search_actions_no_match_returns_empty(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1", category="geometry", dcc="maya")
+        results = reg.search_actions(category="nonexistent")
+        assert len(results) == 0
+
+    def test_search_actions_empty_registry(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        assert reg.search_actions(category="geometry") == []
+
+    # ── get_categories ─────────────────────────────────────────────────────────
+
+    def test_get_categories_sorted_dedup(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1", category="geometry", dcc="maya")
+        reg.register(name="a2", category="geometry", dcc="maya")
+        reg.register(name="a3", category="export", dcc="maya")
+        cats = reg.get_categories()
+        assert cats == ["export", "geometry"]
+
+    def test_get_categories_scoped_to_dcc(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1", category="geometry", dcc="maya")
+        reg.register(name="a2", category="render", dcc="blender")
+        assert reg.get_categories(dcc_name="maya") == ["geometry"]
+        assert reg.get_categories(dcc_name="blender") == ["render"]
+
+    def test_get_categories_skips_empty_category(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1")  # no category → default ""
+        reg.register(name="a2", category="tools")
+        cats = reg.get_categories()
+        assert cats == ["tools"]  # empty strings excluded
+
+    def test_get_categories_empty_registry(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        assert reg.get_categories() == []
+
+    # ── get_tags ───────────────────────────────────────────────────────────────
+
+    def test_get_tags_sorted_dedup(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1", tags=["geo", "create"], dcc="maya")
+        reg.register(name="a2", tags=["geo", "delete"], dcc="maya")
+        tags = reg.get_tags()
+        assert tags == ["create", "delete", "geo"]
+
+    def test_get_tags_scoped_to_dcc(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1", tags=["maya_tag"], dcc="maya")
+        reg.register(name="a2", tags=["blender_tag"], dcc="blender")
+        assert reg.get_tags(dcc_name="maya") == ["maya_tag"]
+        assert reg.get_tags(dcc_name="blender") == ["blender_tag"]
+
+    def test_get_tags_empty_registry(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        assert reg.get_tags() == []
+
+    def test_get_tags_no_tags(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1")  # no tags
+        assert reg.get_tags() == []
+
+    # ── count_actions ──────────────────────────────────────────────────────────
+
+    def test_count_actions_all(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1", dcc="maya")
+        reg.register(name="a2", dcc="maya")
+        assert reg.count_actions() == 2
+
+    def test_count_actions_by_category(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1", category="geometry", dcc="maya")
+        reg.register(name="a2", category="export", dcc="maya")
+        assert reg.count_actions(category="geometry") == 1
+        assert reg.count_actions(category="export") == 1
+
+    def test_count_actions_no_match(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1", category="geometry", dcc="maya")
+        assert reg.count_actions(category="nonexistent") == 0
+
+    def test_count_actions_matches_search_results_len(self) -> None:
+        reg = dcc_mcp_core.ActionRegistry()
+        reg.register(name="a1", category="geometry", tags=["create"], dcc="maya")
+        reg.register(name="a2", category="geometry", tags=["delete"], dcc="maya")
+        search_len = len(reg.search_actions(category="geometry", tags=["create"]))
+        count = reg.count_actions(category="geometry", tags=["create"])
+        assert search_len == count
+
 
 class TestEventBus:
     def test_create(self) -> None:

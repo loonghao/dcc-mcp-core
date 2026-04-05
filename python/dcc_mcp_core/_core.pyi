@@ -106,6 +106,57 @@ class ActionRegistry:
     def list_actions(self, dcc_name: str | None = None) -> list[dict[str, Any]]: ...
     def list_actions_for_dcc(self, dcc_name: str) -> list[str]: ...
     def get_all_dccs(self) -> list[str]: ...
+    def search_actions(
+        self,
+        category: str | None = None,
+        tags: list[str] = [],
+        dcc_name: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Search actions by category, tags, and/or DCC name.
+
+        All filters are AND-ed:
+
+        - ``category``: exact match (``None`` / empty = no filter)
+        - ``tags``: action must contain **all** requested tags (empty = no filter)
+        - ``dcc_name``: limit to a specific DCC (``None`` = all DCCs)
+
+        Example::
+
+            reg.register(name="create_sphere", category="geometry",
+                         tags=["create", "mesh"], dcc="maya")
+            results = reg.search_actions(category="geometry", tags=["create"])
+        """
+        ...
+    def get_categories(self, dcc_name: str | None = None) -> list[str]:
+        """Return all unique action categories in sorted order.
+
+        Optionally scoped to a specific DCC.
+        """
+        ...
+    def get_tags(self, dcc_name: str | None = None) -> list[str]:
+        """Return all unique action tags in sorted order.
+
+        Optionally scoped to a specific DCC.
+        """
+        ...
+    def count_actions(
+        self,
+        category: str | None = None,
+        tags: list[str] = [],
+        dcc_name: str | None = None,
+    ) -> int:
+        """Count actions matching the given search criteria.
+
+        Convenience wrapper around :meth:`search_actions` that returns the count
+        rather than the full list of matching actions.
+
+        Example::
+
+            reg.register(name="create_sphere", category="geometry", dcc="maya")
+            assert reg.count_actions(category="geometry") == 1
+            assert reg.count_actions(category="export") == 0
+        """
+        ...
     def reset(self) -> None: ...
     def __len__(self) -> int: ...
     def __repr__(self) -> str: ...
@@ -939,6 +990,21 @@ class ServiceEntry:
     metadata: dict[str, str]
     status: ServiceStatus
     transport_address: TransportAddress | None
+    last_heartbeat_ms: int
+    """Last heartbeat timestamp in milliseconds since Unix epoch.
+
+    Useful for ``LazySessionPool`` implementations to evict idle sessions:
+
+    .. code-block:: python
+
+        import time
+        entry = mgr.get_service("maya", instance_id)
+        idle_sec = (time.time() * 1000 - entry.last_heartbeat_ms) / 1000
+        if idle_sec > 300:
+            mgr.deregister_service("maya", instance_id)
+
+    Updated by :meth:`TransportManager.heartbeat`.
+    """
 
     @property
     def is_ipc(self) -> bool:
@@ -972,10 +1038,60 @@ class TransportManager:
         version: str | None = None,
         scene: str | None = None,
         metadata: dict[str, str] | None = None,
-    ) -> str: ...
+        transport_address: TransportAddress | None = None,
+    ) -> str:
+        """Register a DCC service instance.
+
+        Args:
+            dcc_type:           DCC application type (e.g. "maya").
+            host:               Host address (e.g. "127.0.0.1").
+            port:               TCP port number.
+            version:            DCC version string (optional).
+            scene:              Currently open scene/file (optional).
+            metadata:           Arbitrary metadata dict (optional).
+            transport_address:  Preferred IPC transport address (optional).
+                                When provided, enables Named Pipe or Unix Socket
+                                for lower latency same-machine communication.
+                                Use ``TransportAddress.default_local(dcc_type, pid)``
+                                to auto-select the optimal IPC transport.
+
+        Returns:
+            The instance_id (UUID string) of the registered service.
+
+        Example::
+
+            import os
+            from dcc_mcp_core import TransportManager, TransportAddress
+
+            mgr = TransportManager(registry_dir="/tmp/dcc-mcp")
+            addr = TransportAddress.default_local("maya", os.getpid())
+            instance_id = mgr.register_service(
+                "maya", "127.0.0.1", 18812,
+                transport_address=addr,
+            )
+
+        """
+        ...
     def deregister_service(self, dcc_type: str, instance_id: str) -> bool: ...
     def list_instances(self, dcc_type: str) -> list[ServiceEntry]: ...
     def list_all_services(self) -> list[ServiceEntry]: ...
+    def list_all_instances(self) -> list[ServiceEntry]:
+        """List all registered instances across all DCC types.
+
+        Alias for :meth:`list_all_services` using the naming convention expected
+        by smart-routing integrations.
+
+        Returns:
+            List of ServiceEntry objects for all registered DCC instances.
+
+        Example::
+
+            mgr = TransportManager("/tmp/dcc-mcp")
+            for entry in mgr.list_all_instances():
+                print(entry.dcc_type, entry.instance_id, entry.status)
+
+        """
+        ...
     def get_service(self, dcc_type: str, instance_id: str) -> ServiceEntry | None: ...
     def heartbeat(self, dcc_type: str, instance_id: str) -> bool: ...
     def update_service_status(self, dcc_type: str, instance_id: str, status: ServiceStatus) -> bool: ...

@@ -270,14 +270,18 @@ fn validate_value(path: &str, value: &Value, schema: &Value, errors: &mut Vec<Va
 
         // additionalProperties: false
         if let Some(Value::Bool(false)) = schema_obj.get("additionalProperties") {
-            if let Some(Value::Object(props)) = schema_obj.get("properties") {
-                for key in obj.keys() {
-                    if !props.contains_key(key.as_str()) {
-                        errors.push(ValidationError {
-                            path: path.to_string(),
-                            message: format!("unexpected additional property '{key}'"),
-                        });
-                    }
+            let known_props: std::collections::HashSet<&str> = schema_obj
+                .get("properties")
+                .and_then(|p| p.as_object())
+                .map_or_else(std::collections::HashSet::new, |props| {
+                    props.keys().map(String::as_str).collect()
+                });
+            for key in obj.keys() {
+                if !known_props.contains(key.as_str()) {
+                    errors.push(ValidationError {
+                        path: path.to_string(),
+                        message: format!("unexpected additional property '{key}'"),
+                    });
                 }
             }
         }
@@ -355,7 +359,7 @@ mod tests {
     fn test_number_type_accepts_int_and_float() {
         let meta = make_meta_with_schema(json!({ "type": "number" }));
         let v = ActionValidator::new(&meta);
-        assert!(v.validate_input(&json!(3.14)).is_valid());
+        assert!(v.validate_input(&json!(1.5)).is_valid());
         assert!(v.validate_input(&json!(42)).is_valid());
     }
 
@@ -680,6 +684,145 @@ mod tests {
         let v = ActionValidator::from_schema(schema);
         assert!(v.validate_input(&json!("hello")).is_valid());
         assert!(!v.validate_input(&json!("")).is_valid());
+    }
+
+    // ── boolean schema (JSON Schema `true`/`false`) ───────────────────────────
+
+    #[test]
+    fn test_boolean_schema_true_accepts_anything() {
+        // `true` schema: any value is valid
+        let v = ActionValidator::from_schema(json!(true));
+        assert!(v.validate_input(&json!(null)).is_valid());
+        assert!(v.validate_input(&json!(42)).is_valid());
+        assert!(v.validate_input(&json!("hello")).is_valid());
+        assert!(v.validate_input(&json!({"x": 1})).is_valid());
+    }
+
+    #[test]
+    fn test_boolean_schema_false_accepts_anything() {
+        // Our validator skips validation for non-object schemas (incl. `false`)
+        // so no errors are generated — matches lenient "unknown schema → skip" policy.
+        let v = ActionValidator::from_schema(json!(false));
+        assert!(v.validate_input(&json!(null)).is_valid());
+    }
+
+    // ── additionalProperties: false without properties ────────────────────────
+
+    #[test]
+    fn test_additional_properties_false_no_properties_key() {
+        // `additionalProperties: false` without a `properties` key —
+        // no known properties means every key is "additional".
+        let v = ActionValidator::from_schema(json!({
+            "type": "object",
+            "additionalProperties": false
+        }));
+        // An empty object has no additional properties → valid
+        assert!(v.validate_input(&json!({})).is_valid());
+        // Any key is extra → invalid
+        let result = v.validate_input(&json!({"anything": 1}));
+        assert!(!result.is_valid());
+    }
+
+    // ── deeply nested array items ─────────────────────────────────────────────
+
+    #[test]
+    fn test_nested_array_items_type_check() {
+        // Array of arrays of numbers
+        let v = ActionValidator::from_schema(json!({
+            "type": "array",
+            "items": {
+                "type": "array",
+                "items": { "type": "number" }
+            }
+        }));
+        assert!(v.validate_input(&json!([[1.0, 2.0], [3.0]])).is_valid());
+        let result = v.validate_input(&json!([[1.0, "bad"], [3.0]]));
+        assert!(!result.is_valid());
+        // Path should include both array indices
+        assert!(result.errors[0].path.contains("[0]"));
+        assert!(result.errors[0].path.contains("[1]"));
+    }
+
+    // ── enum inside property ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_enum_inside_property() {
+        let v = ActionValidator::from_schema(json!({
+            "type": "object",
+            "properties": {
+                "mode": { "enum": ["read", "write", "append"] }
+            }
+        }));
+        assert!(v.validate_input(&json!({"mode": "read"})).is_valid());
+        let result = v.validate_input(&json!({"mode": "invalid"}));
+        assert!(!result.is_valid());
+        assert!(result.errors[0].path.contains("mode"));
+    }
+
+    // ── multiple errors accumulate ────────────────────────────────────────────
+
+    #[test]
+    fn test_multiple_errors_accumulate() {
+        let v = ActionValidator::from_schema(json!({
+            "type": "object",
+            "required": ["x", "y"],
+            "properties": {
+                "x": { "type": "number", "minimum": 0.0 },
+                "y": { "type": "string", "maxLength": 5 }
+            }
+        }));
+        // x wrong type, y too long
+        let result = v.validate_input(&json!({"x": "bad", "y": "toolong"}));
+        assert!(!result.is_valid());
+        // Should have at least 2 errors (type mismatch for x + length for y)
+        assert!(result.errors.len() >= 2);
+    }
+
+    // ── array with both minItems and items schema ─────────────────────────────
+
+    #[test]
+    fn test_array_min_items_and_items_schema() {
+        let v = ActionValidator::from_schema(json!({
+            "type": "array",
+            "minItems": 2,
+            "items": { "type": "number" }
+        }));
+        assert!(v.validate_input(&json!([1.0, 2.0])).is_valid());
+        // Too short
+        assert!(!v.validate_input(&json!([1.0])).is_valid());
+        // Correct length but wrong item type
+        let result = v.validate_input(&json!([1.0, "oops"]));
+        assert!(!result.is_valid());
+    }
+
+    // ── string boundary at exact limits ──────────────────────────────────────
+
+    #[test]
+    fn test_string_exact_min_max_length() {
+        let v = ActionValidator::from_schema(json!({
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 5
+        }));
+        assert!(v.validate_input(&json!("abc")).is_valid()); // exactly 3
+        assert!(v.validate_input(&json!("abcde")).is_valid()); // exactly 5
+        assert!(!v.validate_input(&json!("ab")).is_valid()); // 2 < min
+        assert!(!v.validate_input(&json!("abcdef")).is_valid()); // 6 > max
+    }
+
+    // ── numeric boundary at exact limits ─────────────────────────────────────
+
+    #[test]
+    fn test_numeric_exact_min_max() {
+        let v = ActionValidator::from_schema(json!({
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+        }));
+        assert!(v.validate_input(&json!(0.0)).is_valid()); // exactly min
+        assert!(v.validate_input(&json!(1.0)).is_valid()); // exactly max
+        assert!(!v.validate_input(&json!(-0.001)).is_valid());
+        assert!(!v.validate_input(&json!(1.001)).is_valid());
     }
 
     // ── error message format ──────────────────────────────────────────────────

@@ -164,6 +164,14 @@ all_actions = reg.list_actions()                           # -> List[dict]
 all_actions = reg.list_actions(dcc_name="maya")            # -> List[dict] scoped
 dccs = reg.get_all_dccs()                                  # -> List[str]
 
+# Search & discovery (v0.12.5+)
+# search_actions: all filters are AND-ed; None / [] = no filter
+geo_actions = reg.search_actions(category="geometry")               # by category
+mesh_actions = reg.search_actions(tags=["mesh"])                    # by tag
+create_geo  = reg.search_actions(category="geometry", tags=["create"], dcc_name="maya")
+categories = reg.get_categories()                                   # sorted unique categories
+tags       = reg.get_tags(dcc_name="maya")                          # sorted unique tags in maya
+
 # Manage
 reg.reset()    # clear all entries
 len(reg)       # count of registered actions
