@@ -142,6 +142,12 @@ impl ProcessMonitor {
     pub fn tracked_count(&self) -> usize {
         self.tracked.len()
     }
+
+    /// Return `true` if `pid` is currently registered for tracking.
+    #[must_use]
+    pub fn is_tracked(&self, pid: u32) -> bool {
+        self.tracked.contains_key(&pid)
+    }
 }
 
 impl Default for ProcessMonitor {

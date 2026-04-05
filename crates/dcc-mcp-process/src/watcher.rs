@@ -152,6 +152,16 @@ impl ProcessWatcher {
             .unwrap_or(0)
     }
 
+    /// Return `true` if the given PID is currently being watched.
+    #[must_use]
+    pub fn is_tracked(&self, pid: u32) -> bool {
+        self.inner
+            .monitor
+            .lock()
+            .map(|m| m.is_tracked(pid))
+            .unwrap_or(false)
+    }
+
     /// Query the latest snapshot for a specific PID (may be slightly stale).
     ///
     /// Returns `None` if the PID is not tracked or the process has already exited.

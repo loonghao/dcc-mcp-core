@@ -426,10 +426,10 @@ class TestRateLimitMiddleware:
 
     def test_window_reset(self):
         pipeline, _ = make_pipeline("action")
-        pipeline.add_middleware(RateLimitMiddleware(max_calls=1, window_seconds=0.001))
+        pipeline.add_middleware(RateLimitMiddleware(max_calls=1, window_seconds=0.05))
 
         pipeline.dispatch("action", {})
-        time.sleep(0.002)  # wait for window to expire
+        time.sleep(0.1)  # wait for window to expire
         pipeline.dispatch("action", {})  # should work after reset
 
     def test_name(self):

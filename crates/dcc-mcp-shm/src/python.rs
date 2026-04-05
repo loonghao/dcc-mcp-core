@@ -11,7 +11,7 @@ use pyo3::prelude::*;
 
 use crate::buffer::{BufferDescriptor, SharedBuffer};
 use crate::error::ShmError;
-use crate::pool::BufferPool;
+use crate::pool::{BufferPool, PooledBuffer};
 use crate::scene::{SceneDataKind, SharedSceneBuffer};
 
 // ── Error conversion ─────────────────────────────────────────────────────────
@@ -35,6 +35,8 @@ fn to_py(e: ShmError) -> PyErr {
 #[pyclass(name = "PySharedBuffer")]
 pub struct PySharedBuffer {
     inner: SharedBuffer,
+    /// Keeps the pool slot marked as in-use until this Python object is GC'd.
+    _pool_guard: Option<PooledBuffer>,
 }
 
 #[pymethods]
@@ -43,7 +45,10 @@ impl PySharedBuffer {
     #[staticmethod]
     fn create(capacity: usize) -> PyResult<Self> {
         SharedBuffer::create(capacity)
-            .map(|inner| Self { inner })
+            .map(|inner| Self {
+                inner,
+                _pool_guard: None,
+            })
             .map_err(to_py)
     }
 
@@ -51,7 +56,10 @@ impl PySharedBuffer {
     #[staticmethod]
     fn open(path: &str, id: &str) -> PyResult<Self> {
         SharedBuffer::open(path, id)
-            .map(|inner| Self { inner })
+            .map(|inner| Self {
+                inner,
+                _pool_guard: None,
+            })
             .map_err(to_py)
     }
 
@@ -132,10 +140,15 @@ impl PyBufferPool {
     }
 
     /// Acquire a free buffer.  Raises ``RuntimeError`` if all slots are in use.
+    ///
+    /// The pool slot remains marked as in-use until the returned buffer object
+    /// is garbage-collected by Python.
     fn acquire(&self) -> PyResult<PySharedBuffer> {
         let guard = self.inner.acquire().map_err(to_py)?;
+        let inner = guard.buffer.clone();
         Ok(PySharedBuffer {
-            inner: guard.buffer.clone(),
+            inner,
+            _pool_guard: Some(guard),
         })
     }
 

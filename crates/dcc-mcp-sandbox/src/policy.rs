@@ -62,6 +62,39 @@ impl Default for SandboxPolicy {
     }
 }
 
+// ── Path helpers ──────────────────────────────────────────────────────────────
+
+/// Canonicalize `path`, falling back to the nearest existing ancestor when the
+/// path does not exist (e.g. a planned output file that hasn't been created).
+///
+/// This ensures that Windows long/short path normalization is applied to the
+/// portion of the path that does exist, avoiding false negatives when comparing
+/// against `allowed_paths` that were themselves canonicalized.
+fn canonicalize_best_effort(path: &Path) -> std::path::PathBuf {
+    if let Ok(p) = path.canonicalize() {
+        return p;
+    }
+    // Walk up the ancestor chain until we find something that exists.
+    let mut ancestor = path.to_path_buf();
+    let mut suffix = std::path::PathBuf::new();
+    while let Some(parent) = ancestor.parent().map(|p| p.to_path_buf()) {
+        let file_name = ancestor
+            .file_name()
+            .map(std::path::PathBuf::from)
+            .unwrap_or_default();
+        suffix = file_name.join(&suffix);
+        ancestor = parent;
+        if ancestor.exists() {
+            if let Ok(canonical_ancestor) = ancestor.canonicalize() {
+                return canonical_ancestor.join(suffix);
+            }
+            break;
+        }
+    }
+    // Last resort: return the original path unchanged.
+    path.to_path_buf()
+}
+
 impl SandboxPolicy {
     /// Return a builder for incremental construction.
     pub fn builder() -> SandboxPolicyBuilder {
@@ -97,10 +130,11 @@ impl SandboxPolicy {
         if self.allowed_paths.is_empty() {
             return Ok(());
         }
-        let canonical = match path.canonicalize() {
-            Ok(p) => p,
-            Err(_) => path.to_path_buf(),
-        };
+        // Try to canonicalize the path.  For non-existent paths (e.g. a file
+        // that hasn't been created yet), fall back to canonicalizing the
+        // nearest existing ancestor so that Windows short-path / symlink
+        // normalization still applies.
+        let canonical = canonicalize_best_effort(path);
         for allowed in &self.allowed_paths {
             let allowed_canonical = match allowed.canonicalize() {
                 Ok(p) => p,

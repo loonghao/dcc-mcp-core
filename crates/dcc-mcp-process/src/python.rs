@@ -158,12 +158,14 @@ impl PyProcessMonitor {
     }
 
     /// Returns `True` if `pid` is present in the OS process table.
+    ///
+    /// Performs a fresh OS query for the given PID so `track()` does not need
+    /// to be called first.
     pub fn is_alive(&self, pid: u32) -> PyResult<bool> {
-        Ok(self
-            .inner
-            .lock()
-            .map_err(|_| PyRuntimeError::new_err("monitor lock poisoned"))?
-            .is_alive(pid))
+        use sysinfo::{Pid, ProcessesToUpdate, System};
+        let mut sys = System::new();
+        sys.refresh_processes(ProcessesToUpdate::Some(&[Pid::from_u32(pid)]), true);
+        Ok(sys.process(Pid::from_u32(pid)).is_some())
     }
 
     /// Return the number of currently tracked PIDs.
@@ -261,6 +263,12 @@ impl PyDccLauncher {
     ///     Milliseconds to wait for the process to exit (default 5000).
     #[pyo3(signature = (name, timeout_ms=5000))]
     pub fn terminate(&self, name: &str, timeout_ms: u64) -> PyResult<()> {
+        // Raise immediately if the process is not tracked.
+        if self.inner.pid_of(name).is_none() {
+            return Err(PyRuntimeError::new_err(format!(
+                "process '{name}' is not running"
+            )));
+        }
         let inner = Arc::clone(&self.inner);
         let name = name.to_string();
         let rt = runtime()?;
@@ -270,6 +278,12 @@ impl PyDccLauncher {
 
     /// Forcefully kill the named process.
     pub fn kill(&self, name: &str) -> PyResult<()> {
+        // Raise immediately if the process is not tracked.
+        if self.inner.pid_of(name).is_none() {
+            return Err(PyRuntimeError::new_err(format!(
+                "process '{name}' is not running"
+            )));
+        }
         let inner = Arc::clone(&self.inner);
         let name = name.to_string();
         let rt = runtime()?;
@@ -344,7 +358,11 @@ impl PyCrashRecoveryPolicy {
     /// Returns `True` if the given status string warrants a restart.
     ///
     /// Recognised status values: ``"crashed"``, ``"unresponsive"``.
+    /// Always returns `False` when `max_restarts` is 0.
     pub fn should_restart(&self, status: &str) -> PyResult<bool> {
+        if self.inner.max_restarts == 0 {
+            return Ok(false);
+        }
         let s = parse_status(status)?;
         Ok(self.inner.should_restart(s))
     }
@@ -475,6 +493,26 @@ impl PyProcessWatcher {
     /// Stop monitoring a PID.
     pub fn untrack(&self, pid: u32) {
         self.watcher.untrack(pid);
+    }
+
+    /// Add a PID to watch.  Alias for `track`.
+    pub fn add_watch(&self, pid: u32, name: &str) {
+        self.watcher.track(pid, name);
+    }
+
+    /// Remove a PID from watching.  Alias for `untrack`.
+    pub fn remove_watch(&self, pid: u32) {
+        self.watcher.untrack(pid);
+    }
+
+    /// Number of currently watched PIDs.  Alias for `tracked_count`.
+    pub fn watch_count(&self) -> usize {
+        self.watcher.tracked_count()
+    }
+
+    /// Return `True` if the given PID is currently being watched.
+    pub fn is_watched(&self, pid: u32) -> bool {
+        self.watcher.is_tracked(pid)
     }
 
     /// Start the background watch loop.  No-op if already running.

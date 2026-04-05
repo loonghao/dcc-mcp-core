@@ -126,6 +126,7 @@ impl std::fmt::Display for ScriptLanguage {
 
 /// Information about the currently open scene in a DCC application.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SceneInfo {
     /// Full file path of the scene (empty if untitled/new).
     pub file_path: String,

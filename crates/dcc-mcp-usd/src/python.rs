@@ -323,8 +323,13 @@ impl PyUsdStage {
     }
 
     #[setter]
-    pub fn set_default_prim(&mut self, value: Option<String>) {
+    pub fn set_default_prim_prop(&mut self, value: Option<String>) {
         self.inner.default_prim = value;
+    }
+
+    /// Set the default prim path (callable method form).
+    pub fn set_default_prim(&mut self, path: &str) {
+        self.inner.default_prim = Some(path.to_string());
     }
 
     // ── Prim operations ──
@@ -355,6 +360,20 @@ impl PyUsdStage {
     /// Remove a prim from the root layer.  Returns ``True`` if removed.
     pub fn remove_prim(&mut self, path: &str) -> bool {
         self.inner.remove_prim(path)
+    }
+
+    /// Return the number of prims in the root layer.
+    pub fn prim_count(&self) -> usize {
+        self.inner.root_layer.prims.len()
+    }
+
+    /// Return all prims as a list of ``UsdPrim`` objects (alias for `traverse`).
+    pub fn list_prims(&self) -> Vec<PyUsdPrim> {
+        self.inner
+            .traverse()
+            .into_iter()
+            .map(|p| PyUsdPrim { inner: p.clone() })
+            .collect()
     }
 
     /// Return all prims as a list of ``UsdPrim`` objects.
@@ -454,6 +473,11 @@ impl PyUsdStage {
     }
 
     #[setter]
+    pub fn set_meters_per_unit_prop(&mut self, mpu: f64) {
+        self.inner.root_layer.meters_per_unit = mpu;
+    }
+
+    /// Set the meters per unit value (callable method form).
     pub fn set_meters_per_unit(&mut self, mpu: f64) {
         self.inner.root_layer.meters_per_unit = mpu;
     }

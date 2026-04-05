@@ -242,8 +242,9 @@ impl ActionDispatcher {
             None => true,
             Some(meta) => {
                 let schema = &meta.input_schema;
-                let is_empty =
-                    schema.as_object().map(|o| o.is_empty()).unwrap_or(true) || schema.is_null();
+                let is_empty = schema.is_null()
+                    || schema.as_object().map(|o| o.is_empty()).unwrap_or(false)
+                    || is_default_schema(schema);
                 if is_empty && self.skip_empty_schema_validation {
                     true
                 } else {
@@ -275,6 +276,39 @@ impl ActionDispatcher {
     pub fn registry(&self) -> &ActionRegistry {
         &self.registry
     }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Returns `true` if the schema carries no real constraints — i.e. it is the
+/// default placeholder `{"type":"object","properties":{}}` or any schema that
+/// has no `required` fields and only an empty `properties` map.
+fn is_default_schema(schema: &Value) -> bool {
+    let Some(obj) = schema.as_object() else {
+        return false;
+    };
+    // Must not have a "required" key with a non-empty array
+    if let Some(req) = obj.get("required") {
+        if req.as_array().map(|a| !a.is_empty()).unwrap_or(false) {
+            return false;
+        }
+    }
+    // Properties must be absent or an empty object
+    if let Some(props) = obj.get("properties") {
+        if props.as_object().map(|p| !p.is_empty()).unwrap_or(false) {
+            return false;
+        }
+    }
+    // No additional constraint keywords
+    let constraint_keys = [
+        "anyOf", "oneOf", "allOf", "not", "if", "then", "else", "enum", "const",
+    ];
+    for key in &constraint_keys {
+        if obj.contains_key(*key) {
+            return false;
+        }
+    }
+    true
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
