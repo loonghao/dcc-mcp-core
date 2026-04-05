@@ -185,15 +185,18 @@ impl PySandboxPolicy {
 
     /// Restrict to only these actions (replaces any previous whitelist).
     fn allow_actions(&mut self, actions: Vec<String>) {
-        self.inner = SandboxPolicy::builder()
+        let timeout_ms = self.inner.timeout_ms;
+        let max_actions = self.inner.max_actions;
+        let mode = self.inner.mode;
+        let mut policy = SandboxPolicy::builder()
             .allow_actions(actions)
             .deny_actions(self.inner.denied_actions.iter().cloned())
             .allow_paths(self.inner.allowed_paths.clone())
             .build();
-        // Re-apply fields that the builder may have reset
-        self.inner.timeout_ms = self.inner.timeout_ms;
-        self.inner.max_actions = self.inner.max_actions;
-        self.inner.mode = self.inner.mode;
+        policy.timeout_ms = timeout_ms;
+        policy.max_actions = max_actions;
+        policy.mode = mode;
+        self.inner = policy;
     }
 
     /// Always deny these actions.

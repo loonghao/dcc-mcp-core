@@ -414,7 +414,7 @@ impl PyFramedChannel {
         d.set_item("id", response.id.to_string())?;
         d.set_item("success", response.success)?;
         d.set_item("payload", response.payload.as_slice())?;
-        d.set_item("error", response.error.map(|e| e.into_py(py)))?;
+        d.set_item("error", response.error)?;
         Ok(d.into())
     }
 
