@@ -498,11 +498,12 @@ impl PyUsdStage {
 ///
 /// Args:
 ///     scene_info_json: JSON string of a ``SceneInfo`` object.
-///     dcc_type: The DCC type string (e.g. ``"maya"``).
+///     dcc_type: The DCC type string (e.g. ``"maya"``). Defaults to ``"generic"``.
 ///
 /// Returns:
 ///     A ``UsdStage`` containing the converted scene.
 #[pyfunction]
+#[pyo3(signature = (scene_info_json, dcc_type = "generic"))]
 pub fn scene_info_json_to_stage(scene_info_json: &str, dcc_type: &str) -> PyResult<PyUsdStage> {
     let info: dcc_mcp_protocols::adapters::SceneInfo = serde_json::from_str(scene_info_json)
         .map_err(|e| PyValueError::new_err(format!("invalid SceneInfo JSON: {e}")))?;
