@@ -29,7 +29,7 @@ use super::types::{PyRoutingStrategy, PyServiceEntry, PyServiceStatus};
 ///
 /// Wraps the Rust `TransportManager` with a Tokio runtime for async→sync bridging.
 ///
-/// ```python
+/// ```python,ignore
 /// from dcc_mcp_core import TransportManager
 ///
 /// transport = TransportManager("/path/to/registry")
@@ -191,6 +191,32 @@ impl PyTransportManager {
     ///     List of ServiceEntry objects.
     #[pyo3(name = "list_all_services")]
     fn py_list_all_services(&self) -> Vec<PyServiceEntry> {
+        self.inner
+            .list_all_services()
+            .iter()
+            .map(PyServiceEntry::from)
+            .collect()
+    }
+
+    /// List all registered instances across all DCC types.
+    ///
+    /// Alias for `list_all_services()` using the naming convention expected
+    /// by smart-routing integrations (see dcc-mcp-ipc #27).
+    ///
+    /// Returns:
+    ///     List of ServiceEntry objects for all registered DCC instances.
+    ///
+    /// Example:
+    ///
+    /// ```text
+    /// from dcc_mcp_core import TransportManager
+    /// mgr = TransportManager("/tmp/dcc-mcp")
+    /// all_instances = mgr.list_all_instances()
+    /// for entry in all_instances:
+    ///     print(entry.dcc_type, entry.instance_id, entry.status)
+    /// ```
+    #[pyo3(name = "list_all_instances")]
+    fn py_list_all_instances(&self) -> Vec<PyServiceEntry> {
         self.inner
             .list_all_services()
             .iter()
