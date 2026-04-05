@@ -98,6 +98,9 @@ fn register_actions(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m,
         dcc_mcp_actions::ActionRegistry,
         dcc_mcp_actions::EventBus,
+        dcc_mcp_actions::SemVer,
+        dcc_mcp_actions::versioned::PyVersionConstraint,
+        dcc_mcp_actions::VersionedRegistry,
     );
     dcc_mcp_actions::python::register_classes(m)?;
     Ok(())

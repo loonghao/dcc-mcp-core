@@ -40,6 +40,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
+#[cfg(feature = "python-bindings")]
+use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::registry::ActionMeta;
@@ -51,10 +53,62 @@ use crate::registry::ActionMeta;
 /// Only the numeric components are considered; pre-release labels (e.g. `-alpha`)
 /// are stripped and ignored for comparison purposes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "python-bindings", pyclass(name = "SemVer", get_all))]
 pub struct SemVer {
     pub major: u64,
     pub minor: u64,
     pub patch: u64,
+}
+
+#[cfg(feature = "python-bindings")]
+#[pymethods]
+impl SemVer {
+    #[new]
+    #[pyo3(signature = (major, minor=0, patch=0))]
+    fn py_new(major: u64, minor: u64, patch: u64) -> Self {
+        Self {
+            major,
+            minor,
+            patch,
+        }
+    }
+
+    #[staticmethod]
+    fn parse_str(s: &str) -> PyResult<Self> {
+        Self::parse(s).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+
+    fn matches_constraint(&self, constraint: &PyVersionConstraint) -> bool {
+        constraint.inner.matches(*self)
+    }
+
+    fn __str__(&self) -> String {
+        self.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("SemVer({}, {}, {})", self.major, self.minor, self.patch)
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn __lt__(&self, other: &Self) -> bool {
+        self < other
+    }
+
+    fn __le__(&self, other: &Self) -> bool {
+        self <= other
+    }
+
+    fn __gt__(&self, other: &Self) -> bool {
+        self > other
+    }
+
+    fn __ge__(&self, other: &Self) -> bool {
+        self >= other
+    }
 }
 
 impl SemVer {
@@ -141,6 +195,37 @@ impl fmt::Display for VersionParseError {
 impl std::error::Error for VersionParseError {}
 
 // ── VersionConstraint ────────────────────────────────────────────────────────────
+
+// ── VersionConstraint pyclass ────────────────────────────────────────────────
+
+#[cfg(feature = "python-bindings")]
+#[pyclass(name = "VersionConstraint")]
+pub struct PyVersionConstraint {
+    pub inner: VersionConstraint,
+}
+
+#[cfg(feature = "python-bindings")]
+#[pymethods]
+impl PyVersionConstraint {
+    #[staticmethod]
+    fn parse(s: &str) -> PyResult<Self> {
+        s.parse::<VersionConstraint>()
+            .map(|inner| Self { inner })
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+
+    fn matches(&self, version: &SemVer) -> bool {
+        self.inner.matches(*version)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("VersionConstraint({})", self.inner)
+    }
+
+    fn __str__(&self) -> String {
+        self.inner.to_string()
+    }
+}
 
 /// A version constraint that can be matched against a concrete [`SemVer`].
 ///
@@ -244,6 +329,7 @@ type VersionKey = (String, String);
 /// Older versions are kept until explicitly removed, enabling backward-compatible
 /// resolution through the [`CompatibilityRouter`].
 #[derive(Debug, Default, Clone)]
+#[cfg_attr(feature = "python-bindings", pyclass(name = "VersionedRegistry"))]
 pub struct VersionedRegistry {
     /// `(action_name, dcc_name)` → sorted list of `(SemVer, ActionMeta)`
     store: HashMap<VersionKey, Vec<(SemVer, ActionMeta)>>,
@@ -332,6 +418,62 @@ impl VersionedRegistry {
     #[must_use]
     pub fn router(&self) -> CompatibilityRouter<'_> {
         CompatibilityRouter { registry: self }
+    }
+}
+
+#[cfg(feature = "python-bindings")]
+#[pymethods]
+impl VersionedRegistry {
+    #[new]
+    pub fn py_new() -> Self {
+        Self::new()
+    }
+
+    fn py_register(&mut self, name: String, dcc: String, version: String) {
+        self.register(ActionMeta {
+            name,
+            dcc,
+            version,
+            ..Default::default()
+        });
+    }
+
+    fn py_remove(&mut self, name: &str, dcc: &str, constraint: &PyVersionConstraint) -> usize {
+        self.remove(name, dcc, &constraint.inner)
+    }
+
+    fn py_versions(&self, name: &str, dcc: &str) -> Vec<SemVer> {
+        self.versions(name, dcc)
+    }
+
+    fn py_latest_version(&self, name: &str, dcc: &str) -> Option<String> {
+        self.latest(name, dcc).map(|m| m.version.clone())
+    }
+
+    fn py_keys(&self) -> Vec<(String, String)> {
+        self.keys()
+    }
+
+    fn py_total_entries(&self) -> usize {
+        self.store.values().map(|v| v.len()).sum()
+    }
+
+    fn py_resolve(
+        &self,
+        name: &str,
+        dcc: &str,
+        constraint: &PyVersionConstraint,
+    ) -> Option<String> {
+        self.router()
+            .resolve(name, dcc, &constraint.inner)
+            .map(|m| m.version.clone())
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "VersionedRegistry(entries={})",
+            self.store.values().map(|v| v.len()).sum::<usize>()
+        )
     }
 }
 
