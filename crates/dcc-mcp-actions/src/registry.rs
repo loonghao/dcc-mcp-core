@@ -375,6 +375,26 @@ impl ActionRegistry {
         self.get_tags(dcc_name)
     }
 
+    /// Count actions matching the given search criteria.
+    ///
+    /// Convenience wrapper around :meth:`search_actions`.
+    ///
+    /// Example::
+    ///
+    ///   reg.register(name="create_sphere", category="geometry", dcc="maya")
+    ///   assert reg.count_actions(category="geometry") == 1
+    #[pyo3(name = "count_actions")]
+    #[pyo3(signature = (category=None, tags=vec![], dcc_name=None))]
+    fn py_count_actions(
+        &self,
+        category: Option<&str>,
+        tags: Vec<String>,
+        dcc_name: Option<&str>,
+    ) -> usize {
+        let tag_refs: Vec<&str> = tags.iter().map(String::as_str).collect();
+        self.count_actions(category, &tag_refs, dcc_name)
+    }
+
     /// Reset the registry.
     #[pyo3(name = "reset")]
     fn py_reset(&self) {

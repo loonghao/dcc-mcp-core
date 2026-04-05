@@ -139,6 +139,24 @@ class ActionRegistry:
         Optionally scoped to a specific DCC.
         """
         ...
+    def count_actions(
+        self,
+        category: str | None = None,
+        tags: list[str] = [],
+        dcc_name: str | None = None,
+    ) -> int:
+        """Count actions matching the given search criteria.
+
+        Convenience wrapper around :meth:`search_actions` that returns the count
+        rather than the full list of matching actions.
+
+        Example::
+
+            reg.register(name="create_sphere", category="geometry", dcc="maya")
+            assert reg.count_actions(category="geometry") == 1
+            assert reg.count_actions(category="export") == 0
+        """
+        ...
     def reset(self) -> None: ...
     def __len__(self) -> int: ...
     def __repr__(self) -> str: ...
