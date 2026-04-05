@@ -499,7 +499,7 @@ pub fn framed_io_to_py_channel(
 ///     ```
 #[cfg(feature = "python-bindings")]
 #[pyfunction]
-#[pyo3(signature = (addr, timeout_ms=10000))]
+#[pyo3(name = "connect_ipc", signature = (addr, timeout_ms=10000))]
 pub fn py_connect_ipc(addr: &PyTransportAddress, timeout_ms: u64) -> PyResult<PyFramedChannel> {
     let runtime = tokio::runtime::Runtime::new().map_err(|e| {
         pyo3::exceptions::PyRuntimeError::new_err(format!("failed to create tokio runtime: {e}"))
