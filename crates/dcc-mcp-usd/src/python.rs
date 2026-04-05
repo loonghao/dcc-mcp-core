@@ -521,12 +521,14 @@ pub fn stage_to_scene_info_json(stage: &PyUsdStage) -> PyResult<String> {
 
 /// Convert a unit string to meters per unit.
 #[pyfunction]
+#[pyo3(name = "units_to_mpu")]
 pub fn py_units_to_mpu(units: &str) -> f64 {
     units_to_meters_per_unit(units)
 }
 
 /// Convert meters per unit to a unit string.
 #[pyfunction]
+#[pyo3(name = "mpu_to_units")]
 pub fn py_mpu_to_units(mpu: f64) -> String {
     meters_per_unit_to_units(mpu)
 }
