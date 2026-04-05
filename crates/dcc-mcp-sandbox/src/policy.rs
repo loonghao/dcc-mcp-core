@@ -10,19 +10,14 @@ use crate::error::SandboxError;
 // ── Execution Mode ────────────────────────────────────────────────────────────
 
 /// Whether the sandbox allows write operations.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionMode {
     /// Full read+write access (within other policy constraints).
+    #[default]
     ReadWrite,
     /// Query-only mode; any operation tagged as a write is blocked.
     ReadOnly,
-}
-
-impl Default for ExecutionMode {
-    fn default() -> Self {
-        Self::ReadWrite
-    }
 }
 
 // ── SandboxPolicy ─────────────────────────────────────────────────────────────
