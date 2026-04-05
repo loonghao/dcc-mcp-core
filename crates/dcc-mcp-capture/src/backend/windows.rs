@@ -9,7 +9,9 @@
 
 use crate::capture::DccCapture;
 use crate::error::{CaptureError, CaptureResult};
-use crate::types::{CaptureBackendKind, CaptureConfig, CaptureFormat, CaptureFrame};
+#[cfg(target_os = "windows")]
+use crate::types::CaptureFormat;
+use crate::types::{CaptureBackendKind, CaptureConfig, CaptureFrame};
 
 // ── DxgiBackend ────────────────────────────────────────────────────────────
 

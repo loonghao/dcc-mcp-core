@@ -25,7 +25,7 @@ use crate::error::{ShmError, ShmResult};
 pub const INLINE_THRESHOLD: usize = DEFAULT_CHUNK_SIZE;
 
 /// Kind of DCC scene data stored in this buffer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SceneDataKind {
     /// Raw geometry vertices / normals / UVs.
@@ -35,13 +35,8 @@ pub enum SceneDataKind {
     /// Framebuffer / screenshot (PNG, JPEG, raw RGBA).
     Screenshot,
     /// Arbitrary / unknown data kind.
+    #[default]
     Arbitrary,
-}
-
-impl Default for SceneDataKind {
-    fn default() -> Self {
-        Self::Arbitrary
-    }
 }
 
 /// Thin envelope holding either an inline buffer or a chunk manifest.
