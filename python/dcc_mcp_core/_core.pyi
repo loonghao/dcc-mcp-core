@@ -972,7 +972,40 @@ class TransportManager:
         version: str | None = None,
         scene: str | None = None,
         metadata: dict[str, str] | None = None,
-    ) -> str: ...
+        transport_address: TransportAddress | None = None,
+    ) -> str:
+        """Register a DCC service instance.
+
+        Args:
+            dcc_type:           DCC application type (e.g. "maya").
+            host:               Host address (e.g. "127.0.0.1").
+            port:               TCP port number.
+            version:            DCC version string (optional).
+            scene:              Currently open scene/file (optional).
+            metadata:           Arbitrary metadata dict (optional).
+            transport_address:  Preferred IPC transport address (optional).
+                                When provided, enables Named Pipe or Unix Socket
+                                for lower latency same-machine communication.
+                                Use ``TransportAddress.default_local(dcc_type, pid)``
+                                to auto-select the optimal IPC transport.
+
+        Returns:
+            The instance_id (UUID string) of the registered service.
+
+        Example::
+
+            import os
+            from dcc_mcp_core import TransportManager, TransportAddress
+
+            mgr = TransportManager(registry_dir="/tmp/dcc-mcp")
+            addr = TransportAddress.default_local("maya", os.getpid())
+            instance_id = mgr.register_service(
+                "maya", "127.0.0.1", 18812,
+                transport_address=addr,
+            )
+
+        """
+        ...
     def deregister_service(self, dcc_type: str, instance_id: str) -> bool: ...
     def list_instances(self, dcc_type: str) -> list[ServiceEntry]: ...
     def list_all_services(self) -> list[ServiceEntry]: ...

@@ -114,11 +114,15 @@ impl PyTransportManager {
     ///     version: DCC version string (optional).
     ///     scene: Currently open scene/file (optional).
     ///     metadata: Arbitrary metadata dict (optional).
+    ///     transport_address: Preferred transport address (optional). When provided,
+    ///         enables IPC registration (Named Pipe / Unix Socket) for lower latency.
+    ///         Use TransportAddress.default_local(dcc_type, pid) to auto-select the
+    ///         optimal IPC transport for the current platform.
     ///
     /// Returns:
     ///     The instance_id (UUID string) of the registered service.
     #[pyo3(name = "register_service")]
-    #[pyo3(signature = (dcc_type, host, port, version=None, scene=None, metadata=None))]
+    #[pyo3(signature = (dcc_type, host, port, version=None, scene=None, metadata=None, transport_address=None))]
     fn py_register_service(
         &self,
         dcc_type: &str,
@@ -127,12 +131,16 @@ impl PyTransportManager {
         version: Option<String>,
         scene: Option<String>,
         metadata: Option<HashMap<String, String>>,
+        transport_address: Option<PyRef<'_, super::types::PyTransportAddress>>,
     ) -> PyResult<String> {
         let mut entry = ServiceEntry::new(dcc_type, host, port);
         entry.version = version;
         entry.scene = scene;
         if let Some(md) = metadata {
             entry.metadata = md;
+        }
+        if let Some(addr) = transport_address {
+            entry.transport_address = Some(addr.inner.clone());
         }
         let instance_id = entry.instance_id.to_string();
         self.inner
