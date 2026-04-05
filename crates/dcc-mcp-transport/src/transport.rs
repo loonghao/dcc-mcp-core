@@ -841,8 +841,10 @@ mod tests {
     #[tokio::test]
     async fn test_transport_manager_listen_with_address() {
         let dir = tempfile::tempdir().unwrap();
-        let mut config = TransportConfig::default();
-        config.listen_address = Some("tcp://127.0.0.1:0".to_string());
+        let config = TransportConfig {
+            listen_address: Some("tcp://127.0.0.1:0".to_string()),
+            ..Default::default()
+        };
         let manager = TransportManager::new(config, dir.path()).unwrap();
 
         let listener = manager.listen().await.unwrap();

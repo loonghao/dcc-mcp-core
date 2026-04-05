@@ -1,7 +1,5 @@
 //! Tests for the mock DCC adapter.
 
-#![cfg(test)]
-
 use crate::adapters::{DccErrorCode, SceneInfo, SceneStatistics, ScriptLanguage};
 
 use super::{MockConfig, MockDccAdapter};

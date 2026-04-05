@@ -1,4 +1,4 @@
-//! Circuit breaker — prevents cascading failures in DCC transport connections.
+﻿//! Circuit breaker — prevents cascading failures in DCC transport connections.
 //!
 //! Implements the standard three-state circuit breaker pattern:
 //!
@@ -583,9 +583,9 @@ mod tests {
         #[test]
         fn test_failures_below_threshold_stay_closed() {
             let cb = make_cb(3);
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure();
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure();
             assert_eq!(cb.state(), CircuitState::Closed);
             assert_eq!(cb.consecutive_failures(), 2);
@@ -594,11 +594,11 @@ mod tests {
         #[test]
         fn test_success_resets_failure_counter() {
             let cb = make_cb(3);
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure();
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure();
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_success(); // resets counter
             assert_eq!(cb.consecutive_failures(), 0);
         }
@@ -613,7 +613,7 @@ mod tests {
         fn test_circuit_opens_after_threshold() {
             let cb = make_cb(3);
             for _ in 0..3 {
-                cb.allow_request();
+                let _ = cb.allow_request();
                 cb.record_failure();
             }
             assert_eq!(cb.state(), CircuitState::Open);
@@ -622,7 +622,7 @@ mod tests {
         #[test]
         fn test_open_circuit_rejects_requests() {
             let cb = make_cb(1);
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure(); // trips the circuit
             assert!(!cb.allow_request()); // fast-fail
         }
@@ -630,21 +630,21 @@ mod tests {
         #[test]
         fn test_open_circuit_increments_rejected_counter() {
             let cb = make_cb(1);
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure();
 
-            cb.allow_request(); // rejected
-            cb.allow_request(); // rejected
+            let _ = cb.allow_request(); // rejected
+            let _ = cb.allow_request(); // rejected
             assert_eq!(cb.stats().total_rejected, 2);
         }
 
         #[test]
         fn test_trips_counter_increments() {
             let cb = make_cb(1);
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure(); // trip 1
             cb.reset();
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure(); // trip 2
             assert_eq!(cb.stats().trips, 2);
         }
@@ -658,7 +658,7 @@ mod tests {
         #[test]
         fn test_transitions_to_half_open_after_timeout() {
             let cb = make_fast_recovery_cb(1);
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure(); // opens
 
             assert_eq!(cb.state(), CircuitState::Open);
@@ -671,13 +671,13 @@ mod tests {
         #[test]
         fn test_half_open_probe_success_closes_circuit() {
             let cb = make_fast_recovery_cb(1);
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure(); // opens
 
             std::thread::sleep(Duration::from_millis(2));
             assert_eq!(cb.state(), CircuitState::HalfOpen);
 
-            cb.allow_request(); // probe
+            let _ = cb.allow_request(); // probe
             cb.record_success(); // closes
 
             assert_eq!(cb.state(), CircuitState::Closed);
@@ -686,13 +686,13 @@ mod tests {
         #[test]
         fn test_half_open_probe_failure_reopens_circuit() {
             let cb = make_fast_recovery_cb(1);
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure(); // opens
 
             std::thread::sleep(Duration::from_millis(2));
             assert_eq!(cb.state(), CircuitState::HalfOpen);
 
-            cb.allow_request(); // probe
+            let _ = cb.allow_request(); // probe
             cb.record_failure(); // re-opens
 
             assert_eq!(cb.state(), CircuitState::Open);
@@ -710,18 +710,18 @@ mod tests {
                     failure_window: None,
                 },
             );
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure(); // opens
 
             std::thread::sleep(Duration::from_millis(2));
             // State: HalfOpen
 
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_success(); // 1/2 successes
             assert_eq!(cb.state(), CircuitState::HalfOpen); // still half-open
 
             // Second probe
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_success(); // 2/2 successes → close
             assert_eq!(cb.state(), CircuitState::Closed);
         }
@@ -735,7 +735,7 @@ mod tests {
         #[test]
         fn test_reset_from_open() {
             let cb = make_cb(1);
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure(); // opens
 
             cb.reset();
@@ -746,7 +746,7 @@ mod tests {
         #[test]
         fn test_reset_allows_requests_again() {
             let cb = make_cb(1);
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure(); // opens
             assert!(!cb.allow_request()); // blocked
 
@@ -764,11 +764,11 @@ mod tests {
         fn test_stats_success_rate() {
             let cb = make_cb(10);
             // 3 successes, 1 failure (but record_failure also increments total)
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_success();
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_success();
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_success();
             // record_failure increments total_requests too
             cb.record_failure();
@@ -789,11 +789,11 @@ mod tests {
         #[test]
         fn test_stats_rejected_counted() {
             let cb = make_cb(1);
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure(); // trips
 
             for _ in 0..5 {
-                cb.allow_request(); // all rejected
+                let _ = cb.allow_request(); // all rejected
             }
             assert_eq!(cb.stats().total_rejected, 5);
         }
@@ -865,7 +865,7 @@ mod tests {
         fn test_circuit_breaker_clone() {
             let cb1 = make_cb(3);
             let cb2 = cb1.clone();
-            cb1.allow_request();
+            let _ = cb1.allow_request();
             cb1.record_failure();
             // Clone shares state
             assert_eq!(cb2.consecutive_failures(), 1);
@@ -884,7 +884,7 @@ mod tests {
             let cb2 = registry.get_or_create("maya");
 
             // Same key should share state
-            cb1.allow_request();
+            let _ = cb1.allow_request();
             cb1.record_failure();
             assert_eq!(cb2.consecutive_failures(), 1);
         }
@@ -897,7 +897,7 @@ mod tests {
 
             // Trip maya
             for _ in 0..5 {
-                maya_cb.allow_request();
+                let _ = maya_cb.allow_request();
                 maya_cb.record_failure();
             }
 
@@ -960,7 +960,7 @@ mod tests {
                     ..Default::default()
                 },
             );
-            cb.allow_request();
+            let _ = cb.allow_request();
             cb.record_failure();
             assert_eq!(cb.state(), CircuitState::Open);
         }

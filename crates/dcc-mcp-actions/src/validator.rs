@@ -355,7 +355,7 @@ mod tests {
     fn test_number_type_accepts_int_and_float() {
         let meta = make_meta_with_schema(json!({ "type": "number" }));
         let v = ActionValidator::new(&meta);
-        assert!(v.validate_input(&json!(3.14)).is_valid());
+        assert!(v.validate_input(&json!(1.5)).is_valid());
         assert!(v.validate_input(&json!(42)).is_valid());
     }
 

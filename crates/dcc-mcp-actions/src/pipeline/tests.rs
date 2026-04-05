@@ -1,7 +1,5 @@
 //! Tests for the action middleware pipeline.
 
-#![cfg(test)]
-
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -24,7 +22,7 @@ fn make_pipeline_with_echo() -> ActionPipeline {
         ..Default::default()
     });
     let dispatcher = ActionDispatcher::new(registry);
-    dispatcher.register_handler("echo", |params| Ok(params));
+    dispatcher.register_handler("echo", Ok);
     ActionPipeline::new(dispatcher)
 }
 
