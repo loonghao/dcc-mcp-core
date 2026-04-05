@@ -27,7 +27,6 @@ impl X11Backend {
 #[cfg(target_os = "linux")]
 mod linux_impl {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     impl DccCapture for X11Backend {
         fn backend_kind(&self) -> CaptureBackendKind {
