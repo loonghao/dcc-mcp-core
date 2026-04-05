@@ -52,7 +52,8 @@ jobs:
     if: |
       always() &&
       !cancelled() &&
-      needs.build-wheels.result == 'success'
+      needs.build-wheels.result == 'success' &&
+      startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment:
       name: pypi
