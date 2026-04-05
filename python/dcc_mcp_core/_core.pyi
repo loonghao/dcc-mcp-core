@@ -106,6 +106,39 @@ class ActionRegistry:
     def list_actions(self, dcc_name: str | None = None) -> list[dict[str, Any]]: ...
     def list_actions_for_dcc(self, dcc_name: str) -> list[str]: ...
     def get_all_dccs(self) -> list[str]: ...
+    def search_actions(
+        self,
+        category: str | None = None,
+        tags: list[str] = [],
+        dcc_name: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Search actions by category, tags, and/or DCC name.
+
+        All filters are AND-ed:
+
+        - ``category``: exact match (``None`` / empty = no filter)
+        - ``tags``: action must contain **all** requested tags (empty = no filter)
+        - ``dcc_name``: limit to a specific DCC (``None`` = all DCCs)
+
+        Example::
+
+            reg.register(name="create_sphere", category="geometry",
+                         tags=["create", "mesh"], dcc="maya")
+            results = reg.search_actions(category="geometry", tags=["create"])
+        """
+        ...
+    def get_categories(self, dcc_name: str | None = None) -> list[str]:
+        """Return all unique action categories in sorted order.
+
+        Optionally scoped to a specific DCC.
+        """
+        ...
+    def get_tags(self, dcc_name: str | None = None) -> list[str]:
+        """Return all unique action tags in sorted order.
+
+        Optionally scoped to a specific DCC.
+        """
+        ...
     def reset(self) -> None: ...
     def __len__(self) -> int: ...
     def __repr__(self) -> str: ...

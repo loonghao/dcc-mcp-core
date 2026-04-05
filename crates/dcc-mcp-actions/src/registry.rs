@@ -128,6 +128,106 @@ impl ActionRegistry {
         self.actions.iter().map(|r| r.value().clone()).collect()
     }
 
+    /// Search actions by category, tags, and/or DCC name.
+    ///
+    /// All provided filters are AND-ed together:
+    /// - `category`: exact match (empty string = no category filter)
+    /// - `tags`: action must contain **all** listed tags (empty vec = no tag filter)
+    /// - `dcc_name`: scoped to a specific DCC (None = all DCCs)
+    ///
+    /// Returns all matching `ActionMeta` entries.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use dcc_mcp_actions::registry::{ActionMeta, ActionRegistry};
+    ///
+    /// let reg = ActionRegistry::new();
+    /// reg.register_action(ActionMeta {
+    ///     name: "create_sphere".into(),
+    ///     category: "geometry".into(),
+    ///     tags: vec!["create".into(), "mesh".into()],
+    ///     dcc: "maya".into(),
+    ///     ..Default::default()
+    /// });
+    ///
+    /// // Find all geometry actions with the "create" tag in maya
+    /// let results = reg.search_actions(Some("geometry"), &["create"], Some("maya"));
+    /// assert_eq!(results.len(), 1);
+    /// ```
+    #[must_use]
+    pub fn search_actions(
+        &self,
+        category: Option<&str>,
+        tags: &[&str],
+        dcc_name: Option<&str>,
+    ) -> Vec<ActionMeta> {
+        self.list_actions(dcc_name)
+            .into_iter()
+            .filter(|meta| {
+                // Category filter: if provided, must match exactly
+                if let Some(cat) = category {
+                    if !cat.is_empty() && meta.category != cat {
+                        return false;
+                    }
+                }
+                // Tags filter: action must contain ALL requested tags
+                if !tags.is_empty() {
+                    for tag in tags {
+                        if !meta.tags.iter().any(|t| t == tag) {
+                            return false;
+                        }
+                    }
+                }
+                true
+            })
+            .collect()
+    }
+
+    /// Count actions matching the given search criteria.
+    ///
+    /// Convenience wrapper around [`search_actions`](Self::search_actions).
+    #[must_use]
+    pub fn count_actions(
+        &self,
+        category: Option<&str>,
+        tags: &[&str],
+        dcc_name: Option<&str>,
+    ) -> usize {
+        self.search_actions(category, tags, dcc_name).len()
+    }
+
+    /// Get all unique categories registered in the registry.
+    ///
+    /// Optionally scoped to a specific DCC.
+    #[must_use]
+    pub fn get_categories(&self, dcc_name: Option<&str>) -> Vec<String> {
+        let mut categories: Vec<String> = self
+            .list_actions(dcc_name)
+            .into_iter()
+            .filter(|m| !m.category.is_empty())
+            .map(|m| m.category)
+            .collect();
+        categories.sort();
+        categories.dedup();
+        categories
+    }
+
+    /// Get all unique tags registered in the registry.
+    ///
+    /// Optionally scoped to a specific DCC.
+    #[must_use]
+    pub fn get_tags(&self, dcc_name: Option<&str>) -> Vec<String> {
+        let mut tags: Vec<String> = self
+            .list_actions(dcc_name)
+            .into_iter()
+            .flat_map(|m| m.tags)
+            .collect();
+        tags.sort();
+        tags.dedup();
+        tags
+    }
+
     /// Clear all registered actions.
     pub fn reset(&self) {
         self.actions.clear();
@@ -223,6 +323,56 @@ impl ActionRegistry {
     #[pyo3(name = "get_all_dccs")]
     fn py_get_all_dccs(&self) -> Vec<String> {
         self.get_all_dccs()
+    }
+
+    /// Search actions by category, tags, and/or DCC name.
+    ///
+    /// All provided filters are AND-ed together:
+    ///
+    /// - ``category``: exact category match (``None`` or empty string = no filter)
+    /// - ``tags``: action must contain **all** listed tags (empty list = no filter)
+    /// - ``dcc_name``: scoped to a specific DCC (``None`` = all DCCs)
+    ///
+    /// Returns a list of action metadata dicts.
+    ///
+    /// Example::
+    ///
+    ///   reg.register(name="create_sphere", category="geometry",
+    ///                tags=["create", "mesh"], dcc="maya")
+    ///   results = reg.search_actions(category="geometry", tags=["create"])
+    ///   # [{"name": "create_sphere", ...}]
+    #[pyo3(name = "search_actions")]
+    #[pyo3(signature = (category=None, tags=vec![], dcc_name=None))]
+    fn py_search_actions(
+        &self,
+        py: Python,
+        category: Option<&str>,
+        tags: Vec<String>,
+        dcc_name: Option<&str>,
+    ) -> PyResult<Vec<Py<PyAny>>> {
+        let tag_refs: Vec<&str> = tags.iter().map(String::as_str).collect();
+        self.search_actions(category, &tag_refs, dcc_name)
+            .iter()
+            .map(|meta| action_meta_to_py(py, meta))
+            .collect()
+    }
+
+    /// Get all unique categories in the registry.
+    ///
+    /// Optionally scoped to a specific DCC.
+    #[pyo3(name = "get_categories")]
+    #[pyo3(signature = (dcc_name=None))]
+    fn py_get_categories(&self, dcc_name: Option<&str>) -> Vec<String> {
+        self.get_categories(dcc_name)
+    }
+
+    /// Get all unique tags in the registry.
+    ///
+    /// Optionally scoped to a specific DCC.
+    #[pyo3(name = "get_tags")]
+    #[pyo3(signature = (dcc_name=None))]
+    fn py_get_tags(&self, dcc_name: Option<&str>) -> Vec<String> {
+        self.get_tags(dcc_name)
     }
 
     /// Reset the registry.
@@ -551,5 +701,217 @@ mod tests {
         }
         // At least 5 pre-populated + up to 5 new
         assert!(reg.len() >= 5);
+    }
+
+    // ── search_actions ──────────────────────────────────────────────────────────
+
+    fn make_rich_action(name: &str, dcc: &str, category: &str, tags: Vec<&str>) -> ActionMeta {
+        ActionMeta {
+            name: name.into(),
+            description: format!("{name} desc"),
+            category: category.into(),
+            tags: tags.into_iter().map(String::from).collect(),
+            dcc: dcc.into(),
+            version: "1.0.0".into(),
+            ..Default::default()
+        }
+    }
+
+    fn populate_search_registry() -> ActionRegistry {
+        let reg = ActionRegistry::new();
+        reg.register_action(make_rich_action(
+            "create_sphere",
+            "maya",
+            "geometry",
+            vec!["create", "mesh"],
+        ));
+        reg.register_action(make_rich_action(
+            "delete_mesh",
+            "maya",
+            "geometry",
+            vec!["delete", "mesh"],
+        ));
+        reg.register_action(make_rich_action(
+            "render_scene",
+            "maya",
+            "rendering",
+            vec!["render", "output"],
+        ));
+        reg.register_action(make_rich_action(
+            "create_cube",
+            "blender",
+            "geometry",
+            vec!["create", "mesh"],
+        ));
+        reg.register_action(make_rich_action(
+            "bake_texture",
+            "blender",
+            "rendering",
+            vec!["bake", "texture", "render"],
+        ));
+        reg
+    }
+
+    #[test]
+    fn search_by_category_returns_matching() {
+        let reg = populate_search_registry();
+        let results = reg.search_actions(Some("geometry"), &[], None);
+        assert_eq!(
+            results.len(),
+            3,
+            "should find 3 geometry actions across all DCCs"
+        );
+        assert!(results.iter().all(|m| m.category == "geometry"));
+    }
+
+    #[test]
+    fn search_by_tag_returns_matching() {
+        let reg = populate_search_registry();
+        let results = reg.search_actions(None, &["mesh"], None);
+        assert_eq!(results.len(), 3, "create_sphere, delete_mesh, create_cube");
+        assert!(results.iter().all(|m| m.tags.contains(&"mesh".to_string())));
+    }
+
+    #[test]
+    fn search_by_multiple_tags_all_required() {
+        let reg = populate_search_registry();
+        let results = reg.search_actions(None, &["create", "mesh"], None);
+        assert_eq!(results.len(), 2, "create_sphere + create_cube");
+    }
+
+    #[test]
+    fn search_by_category_and_dcc() {
+        let reg = populate_search_registry();
+        let results = reg.search_actions(Some("geometry"), &[], Some("maya"));
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|m| m.dcc == "maya"));
+    }
+
+    #[test]
+    fn search_by_category_tag_and_dcc() {
+        let reg = populate_search_registry();
+        let results = reg.search_actions(Some("geometry"), &["create"], Some("blender"));
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "create_cube");
+    }
+
+    #[test]
+    fn search_with_no_filters_returns_all() {
+        let reg = populate_search_registry();
+        let results = reg.search_actions(None, &[], None);
+        assert_eq!(results.len(), 5);
+    }
+
+    #[test]
+    fn search_with_empty_category_matches_all_categories() {
+        let reg = populate_search_registry();
+        let results = reg.search_actions(Some(""), &[], None);
+        // Empty string means no category filter
+        assert_eq!(results.len(), 5);
+    }
+
+    #[test]
+    fn search_no_match_returns_empty() {
+        let reg = populate_search_registry();
+        let results = reg.search_actions(Some("nonexistent_category"), &[], None);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn search_tag_not_found_returns_empty() {
+        let reg = populate_search_registry();
+        let results = reg.search_actions(None, &["nonexistent_tag"], None);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn search_on_empty_registry_returns_empty() {
+        let reg = ActionRegistry::new();
+        let results = reg.search_actions(Some("geometry"), &["mesh"], Some("maya"));
+        assert!(results.is_empty());
+    }
+
+    // ── get_categories ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn get_categories_returns_sorted_deduped() {
+        let reg = populate_search_registry();
+        let cats = reg.get_categories(None);
+        assert_eq!(cats, vec!["geometry", "rendering"]);
+    }
+
+    #[test]
+    fn get_categories_scoped_to_dcc() {
+        let reg = populate_search_registry();
+        let cats = reg.get_categories(Some("maya"));
+        assert_eq!(cats, vec!["geometry", "rendering"]);
+        let blender_cats = reg.get_categories(Some("blender"));
+        assert_eq!(blender_cats, vec!["geometry", "rendering"]);
+    }
+
+    #[test]
+    fn get_categories_empty_registry_returns_empty() {
+        let reg = ActionRegistry::new();
+        assert!(reg.get_categories(None).is_empty());
+    }
+
+    #[test]
+    fn get_categories_skips_blank_category() {
+        let reg = ActionRegistry::new();
+        reg.register_action(ActionMeta {
+            name: "no_cat".into(),
+            dcc: "maya".into(),
+            category: String::new(), // blank category
+            ..Default::default()
+        });
+        assert!(reg.get_categories(None).is_empty());
+    }
+
+    // ── get_tags ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn get_tags_returns_sorted_deduped() {
+        let reg = populate_search_registry();
+        let mut tags = reg.get_tags(None);
+        tags.sort(); // already sorted, but just to be explicit
+        // Expected: bake, create, delete, mesh, output, render, texture
+        assert!(tags.contains(&"mesh".to_string()));
+        assert!(tags.contains(&"create".to_string()));
+        assert!(tags.contains(&"render".to_string()));
+        // No duplicates
+        let before_dedup = tags.len();
+        let mut deduped = tags.clone();
+        deduped.dedup();
+        assert_eq!(before_dedup, deduped.len());
+    }
+
+    #[test]
+    fn get_tags_scoped_to_dcc() {
+        let reg = populate_search_registry();
+        let maya_tags = reg.get_tags(Some("maya"));
+        // Maya has: create, mesh, delete, render, output
+        assert!(maya_tags.contains(&"create".to_string()));
+        assert!(maya_tags.contains(&"output".to_string()));
+        // "texture" is only in blender
+        assert!(!maya_tags.contains(&"texture".to_string()));
+    }
+
+    #[test]
+    fn get_tags_empty_registry_returns_empty() {
+        let reg = ActionRegistry::new();
+        assert!(reg.get_tags(None).is_empty());
+    }
+
+    // ── count_actions ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn count_actions_matches_search_results() {
+        let reg = populate_search_registry();
+        assert_eq!(
+            reg.count_actions(Some("geometry"), &["create"], None),
+            reg.search_actions(Some("geometry"), &["create"], None)
+                .len()
+        );
+        assert_eq!(reg.count_actions(None, &[], None), reg.len());
     }
 }

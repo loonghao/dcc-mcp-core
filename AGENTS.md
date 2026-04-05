@@ -182,6 +182,13 @@ names = reg.list_actions_for_dcc("maya")
 all_actions = reg.list_actions()
 dccs = reg.get_all_dccs()
 
+# Search & discovery (all filters AND-ed; None / [] = no filter)
+results = reg.search_actions(category="geometry")                  # by category
+results = reg.search_actions(tags=["create", "mesh"])              # must have ALL tags
+results = reg.search_actions(category="geometry", dcc_name="maya") # category + DCC
+categories = reg.get_categories()                                  # sorted unique categories
+tags = reg.get_tags(dcc_name="maya")                               # sorted unique tags
+
 # Version-aware registry
 from dcc_mcp_core import SemVer, VersionedRegistry, VersionConstraint
 vreg = VersionedRegistry()
