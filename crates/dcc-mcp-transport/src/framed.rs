@@ -571,7 +571,8 @@ mod tests {
         async fn test_send_to_closed_connection() {
             let (mut client, server) = framed_pair().await;
             drop(server);
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            // Give the OS time to propagate the TCP RST/FIN.
+            tokio::time::sleep(Duration::from_millis(200)).await;
 
             let req = Request {
                 id: Uuid::new_v4(),
@@ -579,12 +580,17 @@ mod tests {
                 params: vec![],
             };
 
+            // Send repeatedly until the broken-pipe / connection-reset error
+            // surfaces. TCP send-buffers may absorb a few writes before the
+            // kernel reports the peer closure, so we retry generously and also
+            // interleave a short sleep to let the RST propagate.
             let mut failed = false;
-            for _ in 0..10 {
+            for _ in 0..30 {
                 if client.send(&req).await.is_err() {
                     failed = true;
                     break;
                 }
+                tokio::time::sleep(Duration::from_millis(10)).await;
             }
             assert!(failed, "expected send to fail after peer close");
         }
