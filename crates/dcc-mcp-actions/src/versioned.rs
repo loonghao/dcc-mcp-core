@@ -361,8 +361,7 @@ impl<'a> CompatibilityRouter<'a> {
         self.registry.store.get(&key).and_then(|entries| {
             entries
                 .iter()
-                .filter(|(v, _)| constraint.matches(*v))
-                .next_back() // next_back = highest because entries are sorted ascending
+                .rfind(|(v, _)| constraint.matches(*v)) // highest because entries are sorted ascending
                 .map(|(_, m)| m)
         })
     }
