@@ -13,12 +13,12 @@ use crate::bridge::{
     meters_per_unit_to_units, scene_info_to_stage, stage_to_scene_info, units_to_meters_per_unit,
 };
 use crate::stage::UsdStage;
-use crate::types::{SdfPath, UsdAttribute, UsdLayer, UsdPrim, VtValue};
+use crate::types::{SdfPath, UsdAttribute, UsdPrim, VtValue};
 
 // ── PySdfPath ─────────────────────────────────────────────────────────────────
 
 /// A USD scene description path (e.g. ``/World/Cube``).
-#[pyclass(name = "SdfPath")]
+#[pyclass(name = "SdfPath", from_py_object)]
 #[derive(Clone)]
 pub struct PySdfPath {
     inner: SdfPath,
@@ -82,7 +82,7 @@ impl PySdfPath {
 // ── PyVtValue ─────────────────────────────────────────────────────────────────
 
 /// A USD variant value (bool, int, float, string, vec3f, etc.).
-#[pyclass(name = "VtValue")]
+#[pyclass(name = "VtValue", from_py_object)]
 #[derive(Clone)]
 pub struct PyVtValue {
     pub inner: VtValue,
@@ -157,20 +157,26 @@ impl PyVtValue {
     }
 
     /// Convert to a Python primitive.  Returns ``None`` for array/matrix types.
-    pub fn to_python(&self, py: Python<'_>) -> PyObject {
+    pub fn to_python(&self, py: Python<'_>) -> Py<PyAny> {
         match &self.inner {
-            VtValue::Bool(v) => v.to_object(py),
-            VtValue::Int(v) => v.to_object(py),
-            VtValue::Int64(v) => v.to_object(py),
-            VtValue::Float(v) => v.to_object(py),
-            VtValue::Double(v) => v.to_object(py),
-            VtValue::String(s) | VtValue::Token(s) | VtValue::Asset(s) => s.to_object(py),
-            VtValue::Vec3f(x, y, z) => (*x, *y, *z).to_object(py),
-            VtValue::Vec2f(x, y) => (*x, *y).to_object(py),
-            VtValue::Vec4f(x, y, z, w) => (*x, *y, *z, *w).to_object(py),
-            VtValue::FloatArray(arr) => arr.to_object(py),
-            VtValue::IntArray(arr) => arr.to_object(py),
-            VtValue::StringArray(arr) => arr.to_object(py),
+            VtValue::Bool(v) => v.into_pyobject(py).unwrap().to_owned().into_any().unbind(),
+            VtValue::Int(v) => v.into_pyobject(py).unwrap().into_any().unbind(),
+            VtValue::Int64(v) => v.into_pyobject(py).unwrap().into_any().unbind(),
+            VtValue::Float(v) => v.into_pyobject(py).unwrap().into_any().unbind(),
+            VtValue::Double(v) => v.into_pyobject(py).unwrap().into_any().unbind(),
+            VtValue::String(s) | VtValue::Token(s) | VtValue::Asset(s) => {
+                s.into_pyobject(py).unwrap().into_any().unbind()
+            }
+            VtValue::Vec3f(x, y, z) => (*x, *y, *z).into_pyobject(py).unwrap().into_any().unbind(),
+            VtValue::Vec2f(x, y) => (*x, *y).into_pyobject(py).unwrap().into_any().unbind(),
+            VtValue::Vec4f(x, y, z, w) => (*x, *y, *z, *w)
+                .into_pyobject(py)
+                .unwrap()
+                .into_any()
+                .unbind(),
+            VtValue::FloatArray(arr) => arr.into_pyobject(py).unwrap().into_any().unbind(),
+            VtValue::IntArray(arr) => arr.into_pyobject(py).unwrap().into_any().unbind(),
+            VtValue::StringArray(arr) => arr.into_pyobject(py).unwrap().into_any().unbind(),
             _ => py.None(),
         }
     }
@@ -179,7 +185,7 @@ impl PyVtValue {
 // ── PyUsdPrim ─────────────────────────────────────────────────────────────────
 
 /// A prim (primitive) within a USD stage.
-#[pyclass(name = "UsdPrim")]
+#[pyclass(name = "UsdPrim", from_py_object)]
 #[derive(Clone)]
 pub struct PyUsdPrim {
     pub inner: UsdPrim,
