@@ -40,7 +40,7 @@ mod linux_impl {
                 .unwrap_or(false)
         }
 
-        fn capture(&self, config: &CaptureConfig) -> CaptureResult<CaptureFrame> {
+        fn capture(&self, _config: &CaptureConfig) -> CaptureResult<CaptureFrame> {
             if !self.is_available() {
                 return Err(CaptureError::BackendNotSupported(
                     "DISPLAY environment variable not set; X11 backend unavailable".to_string(),
