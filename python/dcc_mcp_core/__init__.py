@@ -75,6 +75,9 @@ from dcc_mcp_core._core import ScriptResult
 
 # USD scene description
 from dcc_mcp_core._core import SdfPath
+
+# Action Version Management
+from dcc_mcp_core._core import SemVer
 from dcc_mcp_core._core import ServiceEntry
 from dcc_mcp_core._core import ServiceStatus
 from dcc_mcp_core._core import SkillMetadata
@@ -89,6 +92,8 @@ from dcc_mcp_core._core import TransportManager
 from dcc_mcp_core._core import TransportScheme
 from dcc_mcp_core._core import UsdPrim
 from dcc_mcp_core._core import UsdStage
+from dcc_mcp_core._core import VersionConstraint
+from dcc_mcp_core._core import VersionedRegistry
 from dcc_mcp_core._core import VtValue
 from dcc_mcp_core._core import connect_ipc
 from dcc_mcp_core._core import error_result
@@ -190,6 +195,7 @@ __all__ = [
     "ScriptLanguage",
     "ScriptResult",
     "SdfPath",
+    "SemVer",
     "ServiceEntry",
     "ServiceStatus",
     "SkillMetadata",
@@ -204,6 +210,8 @@ __all__ = [
     "TransportScheme",
     "UsdPrim",
     "UsdStage",
+    "VersionConstraint",
+    "VersionedRegistry",
     "VtValue",
     "__author__",
     "__version__",
