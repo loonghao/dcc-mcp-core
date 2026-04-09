@@ -10,6 +10,7 @@ use crate::{
     server::{McpHttpServer, ServerHandle},
 };
 use dcc_mcp_actions::ActionRegistry;
+use dcc_mcp_skills::SkillCatalog;
 
 /// Python-visible MCP HTTP server configuration.
 ///
@@ -146,6 +147,7 @@ impl PyServerHandle {
 #[pyclass(name = "McpHttpServer", skip_from_py_object)]
 pub struct PyMcpHttpServer {
     registry: Arc<ActionRegistry>,
+    catalog: Arc<SkillCatalog>,
     config: McpHttpConfig,
     runtime: Arc<Runtime>,
 }
@@ -165,8 +167,12 @@ impl PyMcpHttpServer {
         let runtime =
             Runtime::new().map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
+        let reg = Arc::new(registry.clone());
+        let catalog = Arc::new(SkillCatalog::new(reg.clone()));
+
         Ok(Self {
-            registry: Arc::new(registry.clone()),
+            registry: reg,
+            catalog,
             config: cfg,
             runtime: Arc::new(runtime),
         })
@@ -176,7 +182,11 @@ impl PyMcpHttpServer {
     ///
     /// This call returns immediately; the server runs in a background thread.
     fn start(&self) -> PyResult<PyServerHandle> {
-        let server = McpHttpServer::new(self.registry.clone(), self.config.clone());
+        let server = McpHttpServer::with_catalog(
+            self.registry.clone(),
+            self.catalog.clone(),
+            self.config.clone(),
+        );
         let handle = self
             .runtime
             .block_on(server.start())
@@ -191,6 +201,22 @@ impl PyMcpHttpServer {
             port,
             bind_addr,
         })
+    }
+
+    /// Access the server's SkillCatalog for progressive skill loading.
+    ///
+    /// Use this to discover and load skills before or after starting the server.
+    ///
+    /// Example::
+    ///
+    ///     server = McpHttpServer(registry, McpHttpConfig(port=8765))
+    ///     catalog = server.catalog
+    ///     catalog.discover(dcc_name="maya")
+    ///     catalog.load_skill("modeling-bevel")
+    ///
+    #[getter]
+    fn catalog(&self) -> Arc<SkillCatalog> {
+        self.catalog.clone()
     }
 
     fn __repr__(&self) -> String {

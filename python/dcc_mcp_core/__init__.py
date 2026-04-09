@@ -87,13 +87,18 @@ from dcc_mcp_core._core import SemVer
 from dcc_mcp_core._core import ServerHandle as McpServerHandle
 from dcc_mcp_core._core import ServiceEntry
 from dcc_mcp_core._core import ServiceStatus
+from dcc_mcp_core._core import SkillCatalog
+from dcc_mcp_core._core import SkillDetail
 from dcc_mcp_core._core import SkillMetadata
 from dcc_mcp_core._core import SkillScanner
+from dcc_mcp_core._core import SkillState
+from dcc_mcp_core._core import SkillSummary
 from dcc_mcp_core._core import SkillWatcher
 from dcc_mcp_core._core import StringWrapper
 from dcc_mcp_core._core import TelemetryConfig
 from dcc_mcp_core._core import TimingMiddleware
 from dcc_mcp_core._core import ToolAnnotations
+from dcc_mcp_core._core import ToolDeclaration
 from dcc_mcp_core._core import ToolDefinition
 from dcc_mcp_core._core import TransportAddress
 from dcc_mcp_core._core import TransportManager
@@ -217,13 +222,18 @@ __all__ = [
     "SemVer",
     "ServiceEntry",
     "ServiceStatus",
+    "SkillCatalog",
+    "SkillDetail",
     "SkillMetadata",
     "SkillScanner",
+    "SkillState",
+    "SkillSummary",
     "SkillWatcher",
     "StringWrapper",
     "TelemetryConfig",
     "TimingMiddleware",
     "ToolAnnotations",
+    "ToolDeclaration",
     "ToolDefinition",
     "TransportAddress",
     "TransportManager",
