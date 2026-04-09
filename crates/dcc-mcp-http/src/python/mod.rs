@@ -249,14 +249,13 @@ impl PyMcpHttpServer {
                     let raw = handler_ref
                         .call1(gil, (params_json.as_str(),))
                         .map_err(|e| format!("handler error: {e}"))?;
-                    // Convert Python return value -> serde_json::Value via __str__
-                    let json_str = raw
+                    // Convert Python return value -> serde_json::Value via str()
+                    let json_str: String = raw
                         .bind(gil)
                         .str()
                         .map_err(|e| e.to_string())?
-                        .to_str()
-                        .map_err(|e| e.to_string())
-                        .map(|s| s.to_string())?;
+                        .to_string_lossy()
+                        .into_owned();
                     // Try to parse as JSON first; fall back to wrapping as a string
                     Ok(serde_json::from_str::<serde_json::Value>(&json_str)
                         .unwrap_or(serde_json::Value::String(json_str)))
@@ -321,18 +320,37 @@ impl PyMcpHttpServer {
     #[pyo3(signature = (query=None, tags=vec![], dcc=None))]
     fn find_skills(
         &self,
+        py: Python<'_>,
         query: Option<&str>,
         tags: Vec<String>,
         dcc: Option<&str>,
-    ) -> Vec<dcc_mcp_skills::SkillSummary> {
+    ) -> PyResult<Vec<Py<PyAny>>> {
+        use dcc_mcp_utils::py_json::json_value_to_pyobject;
         let tag_refs: Vec<&str> = tags.iter().map(String::as_str).collect();
-        self.catalog.find_skills(query, &tag_refs, dcc)
+        self.catalog
+            .find_skills(query, &tag_refs, dcc)
+            .into_iter()
+            .map(|s| {
+                let val = serde_json::to_value(&s)
+                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+                json_value_to_pyobject(py, &val)
+            })
+            .collect::<PyResult<Vec<Py<PyAny>>>>()
     }
 
     /// List all skills with their load status.
     #[pyo3(signature = (status=None))]
-    fn list_skills(&self, status: Option<&str>) -> Vec<dcc_mcp_skills::SkillSummary> {
-        self.catalog.list_skills(status)
+    fn list_skills(&self, py: Python<'_>, status: Option<&str>) -> PyResult<Vec<Py<PyAny>>> {
+        use dcc_mcp_utils::py_json::json_value_to_pyobject;
+        self.catalog
+            .list_skills(status)
+            .into_iter()
+            .map(|s| {
+                let val = serde_json::to_value(&s)
+                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+                json_value_to_pyobject(py, &val)
+            })
+            .collect::<PyResult<Vec<Py<PyAny>>>>()
     }
 
     /// Get detailed info about a specific skill as a Python dict.
