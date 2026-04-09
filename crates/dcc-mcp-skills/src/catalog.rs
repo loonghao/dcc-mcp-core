@@ -49,7 +49,6 @@ use crate::loader;
 /// Load state of a skill in the catalog.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "python-bindings", pyclass(name = "SkillState", eq, get_all))]
 pub enum SkillState {
     /// Skill discovered but not loaded (tools not registered).
     Discovered,
@@ -69,18 +68,6 @@ impl std::fmt::Display for SkillState {
     }
 }
 
-#[cfg(feature = "python-bindings")]
-#[pymethods]
-impl SkillState {
-    fn __repr__(&self) -> String {
-        format!("SkillState.{self}")
-    }
-
-    fn __str__(&self) -> String {
-        self.to_string()
-    }
-}
-
 /// A skill entry in the catalog, tracking its metadata and load state.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SkillEntry {
@@ -97,6 +84,7 @@ pub struct SkillEntry {
 /// Manages discovered skills and their progressive loading.
 ///
 /// Thread-safe: all state is stored in `DashMap` / `DashSet`.
+#[cfg_attr(feature = "python-bindings", pyclass(name = "SkillCatalog"))]
 pub struct SkillCatalog {
     /// All discovered skill entries, keyed by skill name.
     entries: DashMap<String, SkillEntry>,
@@ -452,7 +440,7 @@ impl SkillCatalog {
                 skill_path: e.metadata.skill_path.clone(),
                 scripts: e.metadata.scripts.clone(),
                 tools: e.metadata.tools.clone(),
-                state: e.state.clone(),
+                state: e.state.to_string(),
                 registered_actions: e.registered_actions.clone(),
             }
         })
@@ -527,7 +515,6 @@ pub struct SkillSummary {
 
 /// Detailed information about a skill.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(feature = "python-bindings", pyclass(name = "SkillDetail", get_all))]
 pub struct SkillDetail {
     pub name: String,
     pub description: String,
@@ -538,7 +525,7 @@ pub struct SkillDetail {
     pub skill_path: String,
     pub scripts: Vec<String>,
     pub tools: Vec<ToolDeclaration>,
-    pub state: SkillState,
+    pub state: String,
     pub registered_actions: Vec<String>,
 }
 
@@ -607,10 +594,19 @@ impl SkillCatalog {
 
     /// Get detailed info about a specific skill.
     ///
-    /// Returns None if the skill is not found.
+    /// Returns None if the skill is not found. The detail is returned as a
+    /// Python dict (serialized via serde_json).
     #[pyo3(name = "get_skill_info")]
-    fn py_get_skill_info(&self, skill_name: &str) -> Option<SkillDetail> {
-        self.get_skill_info(skill_name)
+    fn py_get_skill_info(&self, py: Python<'_>, skill_name: &str) -> PyResult<Option<Py<PyAny>>> {
+        use dcc_mcp_utils::py_json::json_value_to_pyobject;
+        match self.get_skill_info(skill_name) {
+            Some(info) => {
+                let val = serde_json::to_value(&info)
+                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+                Ok(Some(json_value_to_pyobject(py, &val)?))
+            }
+            None => Ok(None),
+        }
     }
 
     /// Number of skills in the catalog.
@@ -651,14 +647,6 @@ impl SkillCatalog {
 impl SkillSummary {
     fn __repr__(&self) -> String {
         format!("SkillSummary(name={:?}, loaded={})", self.name, self.loaded)
-    }
-}
-
-#[cfg(feature = "python-bindings")]
-#[pymethods]
-impl SkillDetail {
-    fn __repr__(&self) -> String {
-        format!("SkillDetail(name={:?}, state={})", self.name, self.state)
     }
 }
 
@@ -848,7 +836,7 @@ mod tests {
         let info = catalog.get_skill_info("test-skill").unwrap();
         assert_eq!(info.name, "test-skill");
         assert_eq!(info.tools.len(), 2);
-        assert_eq!(info.state, SkillState::Discovered);
+        assert_eq!(info.state, "discovered");
     }
 
     #[test]
