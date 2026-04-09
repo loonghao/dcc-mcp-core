@@ -47,7 +47,7 @@ class TestSkillMetadata:
         sm = dcc_mcp_core.SkillMetadata(name="old")
         sm.name = "new"
         sm.description = "new desc"
-        sm.tools = ["tool1"]
+        sm.tools = [dcc_mcp_core.ToolDeclaration(name="tool1")]
         sm.dcc = "houdini"
         sm.tags = ["tag1", "tag2"]
         sm.scripts = ["s.py"]
@@ -55,7 +55,7 @@ class TestSkillMetadata:
         sm.version = "3.0.0"
         assert sm.name == "new"
         assert sm.description == "new desc"
-        assert sm.tools == ["tool1"]
+        assert [t.name for t in sm.tools] == ["tool1"]
         assert sm.dcc == "houdini"
         assert sm.tags == ["tag1", "tag2"]
         assert sm.scripts == ["s.py"]
@@ -239,9 +239,10 @@ class TestParseSkillMd:
         )
         meta = dcc_mcp_core.parse_skill_md(str(tmp_path))
         assert meta is not None
-        assert "Bash" in meta.tools
-        assert "Read" in meta.tools
-        assert "Write" in meta.tools
+        tool_names = [t.name for t in meta.tools]
+        assert "Bash" in tool_names
+        assert "Read" in tool_names
+        assert "Write" in tool_names
 
     def test_parse_tools_empty_by_default(self, tmp_path: Path) -> None:
         """A SKILL.md without tools field gives an empty list."""

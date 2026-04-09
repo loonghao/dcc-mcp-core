@@ -73,7 +73,7 @@ class TestParseSkillMdHelloWorld:
 
     def test_tools_contain_bash(self):
         meta = parse_skill_md(_HELLO_WORLD_DIR)
-        assert "Bash" in meta.tools
+        assert "Bash" in meta.allowed_tools
 
     def test_scripts_is_list(self):
         meta = parse_skill_md(_HELLO_WORLD_DIR)
@@ -237,7 +237,7 @@ class TestSkillMetadataConstructor:
         assert "maya" in m.tags
         assert "/path/to/script.py" in m.scripts
         assert "other-skill" in m.depends
-        assert "Bash" in m.tools
+        assert any(t.name == "Bash" for t in m.tools)
 
     def test_equality_same_values(self):
         m1 = SkillMetadata(name="skill-a", dcc="maya")
