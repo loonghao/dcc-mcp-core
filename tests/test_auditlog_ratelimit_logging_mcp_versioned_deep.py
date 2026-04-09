@@ -691,7 +691,17 @@ class TestMcpServerHandleDeep:
         url = handle.mcp_url()
         code, body = _post_json(url, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
         assert code == 200
-        assert body["result"]["tools"] == []
+        # tools/list always includes 5 core discovery tools (find_skills, list_skills, etc.)
+        tools = body["result"]["tools"]
+        tool_names = {t["name"] for t in tools}
+        assert "find_skills" in tool_names
+        assert "load_skill" in tool_names
+        # No user-registered actions
+        assert not any(
+            t
+            for t in tools
+            if t["name"] not in {"find_skills", "list_skills", "get_skill_info", "load_skill", "unload_skill"}
+        )
         handle.shutdown()
 
     def test_server_with_multiple_tools(self):
@@ -704,7 +714,8 @@ class TestMcpServerHandleDeep:
         url = handle.mcp_url()
         code, body = _post_json(url, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
         assert code == 200
-        assert len(body["result"]["tools"]) == 5
+        # 5 user tools + 5 core discovery tools = 10 total
+        assert len(body["result"]["tools"]) == 10
         handle.shutdown()
 
 

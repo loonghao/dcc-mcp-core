@@ -11,6 +11,11 @@ from conftest import create_skill_dir
 import dcc_mcp_core
 
 
+def _td(name: str) -> dcc_mcp_core.ToolDeclaration:
+    """Shorthand to build a ToolDeclaration by name."""
+    return dcc_mcp_core.ToolDeclaration(name=name)
+
+
 class TestSkillMetadata:
     def test_create_default(self) -> None:
         sm = dcc_mcp_core.SkillMetadata(name="test-skill")
@@ -27,7 +32,7 @@ class TestSkillMetadata:
         sm = dcc_mcp_core.SkillMetadata(
             name="maya-tool",
             description="A Maya tool",
-            tools=["read", "write"],
+            tools=[_td("read"), _td("write")],
             dcc="maya",
             tags=["geometry"],
             scripts=["hello.py"],
@@ -36,8 +41,8 @@ class TestSkillMetadata:
         )
         assert sm.dcc == "maya"
         assert sm.description == "A Maya tool"
-        assert "read" in sm.tools
-        assert "write" in sm.tools
+        assert any(t.name == "read" for t in sm.tools)
+        assert any(t.name == "write" for t in sm.tools)
         assert sm.tags == ["geometry"]
         assert sm.scripts == ["hello.py"]
         assert sm.skill_path == "/path/to/skill"
@@ -47,7 +52,7 @@ class TestSkillMetadata:
         sm = dcc_mcp_core.SkillMetadata(name="old")
         sm.name = "new"
         sm.description = "new desc"
-        sm.tools = ["tool1"]
+        sm.tools = [_td("tool1")]
         sm.dcc = "houdini"
         sm.tags = ["tag1", "tag2"]
         sm.scripts = ["s.py"]
@@ -55,7 +60,7 @@ class TestSkillMetadata:
         sm.version = "3.0.0"
         assert sm.name == "new"
         assert sm.description == "new desc"
-        assert sm.tools == ["tool1"]
+        assert [t.name for t in sm.tools] == ["tool1"]
         assert sm.dcc == "houdini"
         assert sm.tags == ["tag1", "tag2"]
         assert sm.scripts == ["s.py"]
