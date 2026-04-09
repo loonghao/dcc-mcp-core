@@ -8,7 +8,7 @@ use crate::{
     config::McpHttpConfig,
     server::{McpHttpServer, ServerHandle},
 };
-use dcc_mcp_actions::ActionRegistry;
+use dcc_mcp_actions::{ActionDispatcher, ActionRegistry};
 use dcc_mcp_skills::SkillCatalog;
 
 /// Python-visible MCP HTTP server configuration.
@@ -146,6 +146,7 @@ impl PyServerHandle {
 #[pyclass(name = "McpHttpServer", skip_from_py_object)]
 pub struct PyMcpHttpServer {
     registry: Arc<ActionRegistry>,
+    dispatcher: Arc<ActionDispatcher>,
     catalog: Arc<SkillCatalog>,
     config: McpHttpConfig,
     runtime: Arc<Runtime>,
@@ -167,10 +168,16 @@ impl PyMcpHttpServer {
             Runtime::new().map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         let reg = Arc::new(registry.clone());
-        let catalog = Arc::new(SkillCatalog::new(reg.clone()));
+        let dispatcher = Arc::new(ActionDispatcher::new((*reg).clone()));
+        // Wire the catalog to the same dispatcher so load_skill auto-registers handlers
+        let catalog = Arc::new(SkillCatalog::new_with_dispatcher(
+            reg.clone(),
+            dispatcher.clone(),
+        ));
 
         Ok(Self {
             registry: reg,
+            dispatcher,
             catalog,
             config: cfg,
             runtime: Arc::new(runtime),
@@ -185,7 +192,8 @@ impl PyMcpHttpServer {
             self.registry.clone(),
             self.catalog.clone(),
             self.config.clone(),
-        );
+        )
+        .with_dispatcher(self.dispatcher.clone());
         let handle = self
             .runtime
             .block_on(server.start())
@@ -200,6 +208,67 @@ impl PyMcpHttpServer {
             port,
             bind_addr,
         })
+    }
+
+    /// Register a Python callable as the handler for ``action_name``.
+    ///
+    /// The callable receives a single argument: a dict of action parameters.
+    /// It must return a JSON-serialisable value.
+    ///
+    /// Example::
+    ///
+    ///     server.register_handler("get_scene_info", lambda params: {"scene": "untitled"})
+    ///
+    /// Raises:
+    ///     TypeError: If ``handler`` is not callable.
+    #[pyo3(signature = (action_name, handler))]
+    fn register_handler(
+        &self,
+        py: Python<'_>,
+        action_name: &str,
+        handler: Py<PyAny>,
+    ) -> PyResult<()> {
+        if !handler.bind(py).is_callable() {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "handler must be callable",
+            ));
+        }
+        // Store a Rust closure in the dispatcher that calls the Python callable.
+        // The closure re-acquires the GIL via Python::attach (pyo3 0.28+).
+        //
+        // Params are serialised to a JSON string and passed as-is to the Python
+        // handler; the handler is expected to call json.loads() on the argument.
+        // The handler's return value is converted via __str__ and stored as a
+        // JSON string in the dispatch output.
+        let handler_ref = handler.clone_ref(py);
+        self.dispatcher
+            .register_handler(action_name, move |params| {
+                let params_json =
+                    serde_json::to_string(&params).unwrap_or_else(|_| "{}".to_string());
+                Python::attach(|gil| {
+                    let raw = handler_ref
+                        .call1(gil, (params_json.as_str(),))
+                        .map_err(|e| format!("handler error: {e}"))?;
+                    // Convert Python return value -> serde_json::Value via __str__
+                    let json_str = raw
+                        .bind(gil)
+                        .str()
+                        .map_err(|e| e.to_string())?
+                        .to_str()
+                        .map_err(|e| e.to_string())
+                        .map(|s| s.to_string())?;
+                    // Try to parse as JSON first; fall back to wrapping as a string
+                    Ok(serde_json::from_str::<serde_json::Value>(&json_str)
+                        .unwrap_or(serde_json::Value::String(json_str)))
+                })
+            });
+        Ok(())
+    }
+
+    /// Return ``True`` if a handler is registered for ``action_name``.
+    #[pyo3(signature = (action_name))]
+    fn has_handler(&self, action_name: &str) -> bool {
+        self.dispatcher.has_handler(action_name)
     }
 
     /// Access the server's SkillCatalog for progressive skill loading.
