@@ -674,7 +674,7 @@ class TestSkillCatalogWithRealSkills:
         examples_dir = Path(__file__).parent / ".." / "examples" / "skills"
         if not examples_dir.is_dir():
             pytest.skip("examples/skills directory not found")
-        cat.discover(extra_paths=[examples_dir])
+        cat.discover(extra_paths=[str(examples_dir)])
         return cat
 
     def test_discover_finds_skills(self):
