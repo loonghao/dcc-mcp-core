@@ -50,6 +50,9 @@ pub struct SkillEntry {
 pub struct SkillSummary {
     pub name: String,
     pub description: String,
+    /// Short hint used for keyword search (from SKILL.md `search-hint` field).
+    /// Falls back to description if not set in SKILL.md.
+    pub search_hint: String,
     pub tags: Vec<String>,
     pub dcc: String,
     pub version: String,

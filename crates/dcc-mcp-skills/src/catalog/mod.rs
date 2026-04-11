@@ -393,6 +393,7 @@ impl SkillCatalog {
 
     /// Search for skills matching the given criteria.
     ///
+    /// Query matches against: `name`, `description`, `search_hint`, and `tool_names`.
     /// All filters are AND-ed together. Empty/None filters match everything.
     pub fn find_skills(
         &self,
@@ -405,13 +406,23 @@ impl SkillCatalog {
             .filter(|entry| {
                 let meta = &entry.value().metadata;
 
-                // Query filter: match against name or description (case-insensitive)
+                // Query filter: match name, description, search_hint, and tool names
                 if let Some(q) = query {
                     if !q.is_empty() {
                         let q_lower = q.to_lowercase();
-                        let name_match = meta.name.to_lowercase().contains(&q_lower);
-                        let desc_match = meta.description.to_lowercase().contains(&q_lower);
-                        if !name_match && !desc_match {
+                        let hint = if meta.search_hint.is_empty() {
+                            &meta.description
+                        } else {
+                            &meta.search_hint
+                        };
+                        let matched = meta.name.to_lowercase().contains(&q_lower)
+                            || meta.description.to_lowercase().contains(&q_lower)
+                            || hint.to_lowercase().contains(&q_lower)
+                            || meta
+                                .tools
+                                .iter()
+                                .any(|t| t.name.to_lowercase().contains(&q_lower));
+                        if !matched {
                             return false;
                         }
                     }
@@ -435,19 +446,7 @@ impl SkillCatalog {
 
                 true
             })
-            .map(|entry| {
-                let e = entry.value();
-                SkillSummary {
-                    name: e.metadata.name.clone(),
-                    description: e.metadata.description.clone(),
-                    tags: e.metadata.tags.clone(),
-                    dcc: e.metadata.dcc.clone(),
-                    version: e.metadata.version.clone(),
-                    tool_count: e.metadata.tools.len(),
-                    tool_names: e.metadata.tools.iter().map(|t| t.name.clone()).collect(),
-                    loaded: e.state == SkillState::Loaded,
-                }
-            })
+            .map(|entry| skill_entry_to_summary(entry.value()))
             .collect()
     }
 
@@ -464,19 +463,7 @@ impl SkillCatalog {
                     _ => true, // "all" or None
                 }
             })
-            .map(|entry| {
-                let e = entry.value();
-                SkillSummary {
-                    name: e.metadata.name.clone(),
-                    description: e.metadata.description.clone(),
-                    tags: e.metadata.tags.clone(),
-                    dcc: e.metadata.dcc.clone(),
-                    version: e.metadata.version.clone(),
-                    tool_count: e.metadata.tools.len(),
-                    tool_names: e.metadata.tools.iter().map(|t| t.name.clone()).collect(),
-                    loaded: e.state == SkillState::Loaded,
-                }
-            })
+            .map(|entry| skill_entry_to_summary(entry.value()))
             .collect()
     }
 
@@ -553,6 +540,29 @@ impl SkillCatalog {
     /// Get a reference to the attached dispatcher, if any.
     pub fn dispatcher(&self) -> Option<&Arc<ActionDispatcher>> {
         self.dispatcher.as_ref()
+    }
+}
+
+// ── Internal helpers ──────────────────────────────────────────────────────
+
+/// Convert a SkillEntry into a SkillSummary.
+///
+/// The `search_hint` falls back to `description` if not set in SKILL.md.
+fn skill_entry_to_summary(e: &SkillEntry) -> SkillSummary {
+    SkillSummary {
+        name: e.metadata.name.clone(),
+        description: e.metadata.description.clone(),
+        search_hint: if e.metadata.search_hint.is_empty() {
+            e.metadata.description.clone()
+        } else {
+            e.metadata.search_hint.clone()
+        },
+        tags: e.metadata.tags.clone(),
+        dcc: e.metadata.dcc.clone(),
+        version: e.metadata.version.clone(),
+        tool_count: e.metadata.tools.len(),
+        tool_names: e.metadata.tools.iter().map(|t| t.name.clone()).collect(),
+        loaded: e.state == SkillState::Loaded,
     }
 }
 
