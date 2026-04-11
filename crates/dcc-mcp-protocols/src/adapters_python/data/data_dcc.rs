@@ -18,7 +18,7 @@ use crate::adapters::{
 };
 
 #[cfg(feature = "python-bindings")]
-use super::enums::{PyDccErrorCode, PyScriptLanguage};
+use super::super::enums::{PyDccErrorCode, PyScriptLanguage};
 
 // ── PyDccInfo ──
 

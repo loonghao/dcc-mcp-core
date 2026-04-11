@@ -1117,6 +1117,7 @@ mod tests {
             ],
             dcc: "blender".to_string(),
             tags: vec!["modeling".to_string()],
+            search_hint: "mesh, modeling, geometry".to_string(),
             scripts: vec!["init.py".to_string()],
             skill_path: "/skills/full".to_string(),
             version: "1.2.3".to_string(),
