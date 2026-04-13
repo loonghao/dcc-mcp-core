@@ -95,6 +95,68 @@ jobs:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: ${{ matrix.artifact_name }}
 
+  # ── Build standalone dcc-mcp-gateway binaries ──
+  build-gateway-binaries:
+    needs: [release-please]
+    if: needs.release-please.outputs.release_created == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: dcc-mcp-gateway-linux-x86_64
+            binary: dcc-mcp-gateway
+          - os: windows-latest
+            artifact_name: dcc-mcp-gateway-windows-x86_64.exe
+            binary: dcc-mcp-gateway.exe
+          - os: macos-latest
+            artifact_name: dcc-mcp-gateway-macos-universal2
+            binary: dcc-mcp-gateway
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.90.0'
+          targets: aarch64-apple-darwin
+
+      - uses: extractions/setup-just@v4
+
+      - name: Cache Cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-gateway-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: ${{ runner.os }}-cargo-gateway-
+
+      - name: Build gateway (macOS universal2)
+        if: matrix.os == 'macos-latest'
+        run: just build-gateway-universal
+
+      - name: Build gateway (Linux / Windows)
+        if: matrix.os != 'macos-latest'
+        run: just build-gateway
+        shell: bash
+
+      - name: Stage artifact (Linux / Windows)
+        if: matrix.os != 'macos-latest'
+        run: cp target/release/${{ matrix.binary }} ${{ matrix.artifact_name }}
+        shell: bash
+
+      - name: Upload gateway to GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          files: ${{ matrix.artifact_name }}
+
   # ── Build wheels only when release-please creates a release ──
   build-wheels:
     needs: [release-please]

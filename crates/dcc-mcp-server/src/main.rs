@@ -45,6 +45,8 @@ use clap::Parser;
 use dcc_mcp_actions::{ActionDispatcher, ActionRegistry};
 use dcc_mcp_http::{McpHttpConfig, McpHttpServer};
 use dcc_mcp_skills::SkillCatalog;
+use dcc_mcp_transport::discovery::file_registry::FileRegistry;
+use dcc_mcp_transport::discovery::types::ServiceEntry;
 use dcc_mcp_utils::filesystem;
 
 /// Standalone MCP server for bridge-mode DCCs.
@@ -79,6 +81,25 @@ struct Args {
     /// MCP server host to bind to.
     #[arg(long, default_value = "127.0.0.1")]
     host: String,
+
+    /// Directory for the shared service registry (used by dcc-mcp-gateway).
+    /// When set, this server registers itself on startup and deregisters on exit,
+    /// enabling gateway discovery. Defaults to $TMPDIR/dcc-mcp/.
+    /// Set to empty string "" to disable gateway registration.
+    #[arg(long, env = "DCC_MCP_REGISTRY_DIR")]
+    registry_dir: Option<String>,
+
+    /// DCC application version (e.g. "2024.2"). Reported to the gateway.
+    #[arg(long, env = "DCC_MCP_DCC_VERSION")]
+    dcc_version: Option<String>,
+
+    /// Currently open scene/project file. Reported to the gateway.
+    #[arg(long, env = "DCC_MCP_SCENE")]
+    scene: Option<String>,
+
+    /// Heartbeat interval (seconds) for gateway registration. 0 = disabled.
+    #[arg(long, env = "DCC_MCP_HEARTBEAT_INTERVAL", default_value = "5")]
+    registry_heartbeat_secs: u64,
 }
 
 #[tokio::main]
@@ -172,6 +193,99 @@ async fn main() -> anyhow::Result<()> {
         handle.port,
     );
 
+    // ── Gateway registration ──────────────────────────────────────────────────
+    //
+    // If a registry directory is configured (or defaults to $TMPDIR/dcc-mcp/),
+    // register this server instance so that dcc-mcp-gateway can discover it.
+    // The registration is removed on clean shutdown.
+
+    let registry_dir = args
+        .registry_dir
+        .as_deref()
+        .map(|s| s.to_string())
+        .or_else(|| {
+            // Default: $TMPDIR/dcc-mcp/
+            Some(
+                std::env::temp_dir()
+                    .join("dcc-mcp")
+                    .to_string_lossy()
+                    .to_string(),
+            )
+        });
+
+    let gateway_key = if let Some(ref dir) = registry_dir {
+        if dir.is_empty() {
+            tracing::info!("Gateway registration disabled (empty registry_dir).");
+            None
+        } else {
+            match FileRegistry::new(dir) {
+                Ok(reg) => {
+                    let mut entry = ServiceEntry::new(
+                        if args.dcc.is_empty() {
+                            "unknown"
+                        } else {
+                            &args.dcc
+                        },
+                        &args.host,
+                        handle.port,
+                    );
+                    if let Some(ref v) = args.dcc_version {
+                        entry.version = Some(v.clone());
+                    }
+                    if let Some(ref s) = args.scene {
+                        entry.scene = Some(s.clone());
+                    }
+                    entry
+                        .metadata
+                        .insert("server_name".to_string(), args.server_name.clone());
+
+                    let key = entry.key();
+                    match reg.register(entry) {
+                        Ok(_) => {
+                            tracing::info!(
+                                dcc = %args.dcc,
+                                port = handle.port,
+                                registry = %dir,
+                                instance = %key.instance_id,
+                                "Registered with gateway registry"
+                            );
+
+                            // Heartbeat task: keep registration alive
+                            if args.registry_heartbeat_secs > 0 {
+                                let reg2 = FileRegistry::new(dir).ok();
+                                let key2 = key.clone();
+                                let interval = args.registry_heartbeat_secs;
+                                tokio::spawn(async move {
+                                    let mut tick = tokio::time::interval(
+                                        std::time::Duration::from_secs(interval),
+                                    );
+                                    loop {
+                                        tick.tick().await;
+                                        if let Some(ref r) = reg2 {
+                                            let _ = r.heartbeat(&key2);
+                                        }
+                                    }
+                                });
+                            }
+
+                            Some((reg, key))
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to register with gateway: {e}");
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to open registry at '{dir}': {e}");
+                    None
+                }
+            }
+        }
+    } else {
+        None
+    };
+
     // ── Start WebSocket bridge server ────────────────────────────────────────
 
     if !args.no_bridge {
@@ -188,6 +302,15 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::signal::ctrl_c().await?;
     tracing::info!("Shutting down…");
+
+    // Deregister from gateway registry on clean shutdown.
+    if let Some((reg, key)) = gateway_key {
+        match reg.deregister(&key) {
+            Ok(_) => tracing::info!("Deregistered from gateway registry"),
+            Err(e) => tracing::warn!("Failed to deregister from gateway: {e}"),
+        }
+    }
+
     handle.shutdown().await;
 
     Ok(())

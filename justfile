@@ -41,6 +41,16 @@ rust-cov:
 build-server:
     cargo build --release -p dcc-mcp-server
 
+# ── Gateway (dcc-mcp-gateway) ─────────────────────────────────────────────────
+
+# Build dcc-mcp-gateway for the current platform
+build-gateway:
+    cargo build --release -p dcc-mcp-gateway
+
+# Run the gateway locally (reads $TMPDIR/dcc-mcp/services.json)
+run-gateway *ARGS:
+    cargo run --release -p dcc-mcp-gateway -- {{ARGS}}
+
 # Build dcc-mcp-server universal2 binary for macOS (requires both targets installed)
 [unix]
 build-server-universal:
@@ -53,6 +63,19 @@ build-server-universal:
         target/x86_64-apple-darwin/release/dcc-mcp-server \
         target/aarch64-apple-darwin/release/dcc-mcp-server
     echo "Built: dcc-mcp-server-macos-universal2"
+
+# Build dcc-mcp-gateway universal2 binary for macOS
+[unix]
+build-gateway-universal:
+    #!/usr/bin/env sh
+    set -eu
+    rustup target add x86_64-apple-darwin aarch64-apple-darwin 2>/dev/null || true
+    cargo build --release -p dcc-mcp-gateway --target x86_64-apple-darwin
+    cargo build --release -p dcc-mcp-gateway --target aarch64-apple-darwin
+    lipo -create -output dcc-mcp-gateway-macos-universal2 \
+        target/x86_64-apple-darwin/release/dcc-mcp-gateway \
+        target/aarch64-apple-darwin/release/dcc-mcp-gateway
+    echo "Built: dcc-mcp-gateway-macos-universal2"
 
 # Run the server locally (auto-discovers skills, MCP :8765, WS bridge :9001)
 run-server *ARGS:
