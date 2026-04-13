@@ -1,7 +1,9 @@
 """Hello World skill script — prints a greeting message.
 
-Reads JSON parameters from stdin (preferred) or falls back to sys.argv
-for backwards-compatible invocation.
+Parameter resolution order:
+1. stdin JSON: {"name": "..."} — used by dcc-mcp-core execute_script
+2. CLI positional arg: greet.py <name> — used by direct invocation / tests
+3. Default: "World"
 """
 
 from __future__ import annotations
@@ -12,14 +14,21 @@ import sys
 
 def main() -> None:
     """Entry point for the greet action."""
-    # Primary: read JSON params from stdin (dcc-mcp-core execute_script protocol)
-    try:
-        raw = sys.stdin.read()
-        params = json.loads(raw) if raw.strip() else {}
-    except Exception:
-        params = {}
+    name = "World"
 
-    name = params.get("name", "World")
+    # 1. Try stdin JSON (dcc-mcp-core execute_script protocol)
+    try:
+        if not sys.stdin.isatty():
+            raw = sys.stdin.read()
+            if raw.strip():
+                params = json.loads(raw)
+                name = params.get("name", name)
+    except Exception:
+        pass
+
+    # 2. Fallback: positional CLI arg (legacy / direct invocation)
+    if name == "World" and len(sys.argv) > 1:
+        name = sys.argv[1]
 
     result = {
         "success": True,
