@@ -19,7 +19,6 @@ import os
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
@@ -58,13 +57,13 @@ class _MockDispatcher:
 
 
 def test_importable_from_package():
-    from dcc_mcp_core import register_diagnostic_handlers  # noqa: F401
+    from dcc_mcp_core import register_diagnostic_handlers
 
     assert callable(register_diagnostic_handlers)
 
 
 def test_importable_from_module():
-    from dcc_mcp_core.dcc_server import register_diagnostic_handlers  # noqa: F401
+    from dcc_mcp_core.dcc_server import register_diagnostic_handlers
 
     assert callable(register_diagnostic_handlers)
 
