@@ -177,7 +177,7 @@ class TestOnDemandLoadingContract:
         tools = _tools_list(url)
 
         stubs = [t["name"] for t in tools if t["name"].startswith("__skill__")]
-        skill_names_from_stubs = {s.removeprefix("__skill__") for s in stubs}
+        skill_names_from_stubs = {s[len("__skill__") :] for s in stubs}
 
         # list_skills should return the same set of skills as the stubs
         body = _post(
