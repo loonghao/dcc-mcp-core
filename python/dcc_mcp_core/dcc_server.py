@@ -57,17 +57,18 @@ logger = logging.getLogger(__name__)
 
 # ── module-level shared state (one per process) ────────────────────────────
 # Populated by register_diagnostic_handlers().
-_sandbox_context: Any = None   # SandboxContext | None
-_action_recorder: Any = None   # ActionRecorder | None
-_dispatcher_ref: Any = None    # ActionDispatcher | None
+_sandbox_context: Any = None  # SandboxContext | None
+_action_recorder: Any = None  # ActionRecorder | None
+_dispatcher_ref: Any = None  # ActionDispatcher | None
 
 
 def _get_sandbox_context() -> Any:
     """Return the shared SandboxContext, creating one lazily if needed."""
-    global _sandbox_context  # noqa: PLW0603
+    global _sandbox_context
     if _sandbox_context is None:
         try:
-            from dcc_mcp_core._core import SandboxContext, SandboxPolicy  # noqa: PLC0415
+            from dcc_mcp_core._core import SandboxContext
+            from dcc_mcp_core._core import SandboxPolicy
 
             policy = SandboxPolicy()
             _sandbox_context = SandboxContext(policy)
@@ -78,10 +79,10 @@ def _get_sandbox_context() -> Any:
 
 def _get_action_recorder(dcc_name: str = "dcc") -> Any:
     """Return the shared ActionRecorder, creating one lazily if needed."""
-    global _action_recorder  # noqa: PLW0603
+    global _action_recorder
     if _action_recorder is None:
         try:
-            from dcc_mcp_core._core import ActionRecorder  # noqa: PLC0415
+            from dcc_mcp_core._core import ActionRecorder
 
             _action_recorder = ActionRecorder(f"dcc-mcp-{dcc_name}")
         except Exception as exc:
@@ -122,21 +123,25 @@ def _handle_get_audit_log(params_json: str) -> str:
         serialized = []
         for entry in entries[:limit]:
             try:
-                serialized.append({
-                    "action": entry.action,
-                    "outcome": entry.outcome,
-                    "timestamp_ms": getattr(entry, "timestamp_ms", None),
-                    "details": getattr(entry, "details", None),
-                })
+                serialized.append(
+                    {
+                        "action": entry.action,
+                        "outcome": entry.outcome,
+                        "timestamp_ms": getattr(entry, "timestamp_ms", None),
+                        "details": getattr(entry, "details", None),
+                    }
+                )
             except Exception:
                 serialized.append(str(entry))
 
-        return json.dumps({
-            "success": True,
-            "total_entries": total,
-            "entries": serialized,
-            "source": "dcc-ipc",
-        })
+        return json.dumps(
+            {
+                "success": True,
+                "total_entries": total,
+                "entries": serialized,
+                "source": "dcc-ipc",
+            }
+        )
     except Exception as exc:
         logger.warning("get_audit_log handler error: %s", exc)
         return json.dumps({"success": False, "message": str(exc)})
@@ -162,11 +167,13 @@ def _handle_get_action_metrics(params_json: str) -> str:
         else:
             metrics_list = [_metric_to_dict(m) for m in recorder.all_metrics()]
 
-        return json.dumps({
-            "success": True,
-            "metrics": metrics_list,
-            "source": "dcc-ipc",
-        })
+        return json.dumps(
+            {
+                "success": True,
+                "metrics": metrics_list,
+                "source": "dcc-ipc",
+            }
+        )
     except Exception as exc:
         logger.warning("get_action_metrics handler error: %s", exc)
         return json.dumps({"success": False, "message": str(exc)})
@@ -239,8 +246,9 @@ def register_diagnostic_handlers(
     - ``get_audit_log`` — sandbox audit log entries
     - ``get_action_metrics`` — ActionRecorder performance counters
     - ``dispatch_action`` — relay through the server's ActionDispatcher
+
     """
-    global _dispatcher_ref  # noqa: PLW0603
+    global _dispatcher_ref
     if dispatcher is not None:
         _dispatcher_ref = dispatcher
 
@@ -252,8 +260,7 @@ def register_diagnostic_handlers(
         server.register_handler("get_action_metrics", _handle_get_action_metrics)
         server.register_handler("dispatch_action", _handle_dispatch_action)
         logger.debug(
-            "Registered diagnostic IPC handlers for dcc=%r: "
-            "get_audit_log, get_action_metrics, dispatch_action",
+            "Registered diagnostic IPC handlers for dcc=%r: get_audit_log, get_action_metrics, dispatch_action",
             dcc_name,
         )
     except Exception as exc:
@@ -269,7 +276,7 @@ def _set_ipc_address_env(dcc_name: str = "dcc") -> None:
         return  # respect any externally-configured override
 
     try:
-        from dcc_mcp_core._core import TransportAddress  # noqa: PLC0415
+        from dcc_mcp_core._core import TransportAddress
 
         addr = TransportAddress.default_local(dcc_name, os.getpid())
         addr_str = str(addr)
