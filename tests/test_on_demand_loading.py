@@ -86,7 +86,11 @@ def _initialize(url: str) -> str:
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=10) as resp:
-        return resp.headers.get("Mcp-Session-Id", "")
+        header_sid = resp.headers.get("Mcp-Session-Id", "")
+        if header_sid:
+            return header_sid
+        body = json.loads(resp.read())
+        return body.get("result", {}).get("__session_id", "")
 
 
 @pytest.fixture(scope="module")

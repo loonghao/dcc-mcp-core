@@ -81,7 +81,13 @@ def _initialize(url: str) -> str:
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=10) as resp:
-        return resp.headers.get("Mcp-Session-Id", "")
+        # Mcp-Session-Id may be in the response header or embedded in the JSON
+        # body as __session_id (how dcc-mcp-core currently works).
+        header_sid = resp.headers.get("Mcp-Session-Id", "")
+        if header_sid:
+            return header_sid
+        body = json.loads(resp.read())
+        return body.get("result", {}).get("__session_id", "")
 
 
 def _make_server(ttl_secs: int = 3600, port: int = 0) -> tuple[McpHttpServer, Any]:
