@@ -413,6 +413,10 @@ mod tests {
         registry.register(entry_a).unwrap();
         assert_eq!(registry.len(), 1);
 
+        // Small sleep to ensure filesystem mtime granularity is observed
+        // (on some systems, mtime has 1-second or coarser precision)
+        std::thread::sleep(Duration::from_millis(100));
+
         // Simulate external write by another process: create a new registry instance
         // that writes a new entry to the same file
         {
