@@ -21,7 +21,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.12.21" # x-release-please-version
+version = "0.12.22" # x-release-please-version
 edition = "2024"
 rust-version = "1.85"
 authors = ["Hal Long <hal.long@outlook.com>"]
@@ -68,6 +68,7 @@ anyhow = "1.0"
 tokio-tungstenite = "0.29"
 futures-util = "0.3"
 reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls"] }
+socket2 = { version = "0.5", features = ["all"] }
 
 # Root package — Python bindings entry point
 # Compiles to `_core.pyd` / `_core.so`, exposed as `dcc_mcp_core._core`
