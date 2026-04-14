@@ -1,0 +1,3 @@
+[build]
+# Reduce codegen-units for faster CI builds (CI often has limited resources)
+codegen-units = 4
