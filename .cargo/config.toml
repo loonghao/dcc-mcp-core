@@ -1,7 +1,9 @@
 [profile.release]
-# Reduce codegen-units for faster CI builds (CI often has limited resources)
-codegen-units = 4
+# Minimal optimization for CI stability
+opt-level = 1
+codegen-units = 16
+lto = false
 
 [profile.test]
 # Speed up test builds
-codegen-units = 4
+codegen-units = 16
