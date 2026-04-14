@@ -1,3 +1,7 @@
-[build]
+[profile.release]
 # Reduce codegen-units for faster CI builds (CI often has limited resources)
+codegen-units = 4
+
+[profile.test]
+# Speed up test builds
 codegen-units = 4
