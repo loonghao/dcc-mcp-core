@@ -163,7 +163,10 @@ Represents a discovered DCC service instance.
 | `host` | `str` | Host address |
 | `port` | `int` | TCP port |
 | `version` | `str \| None` | DCC version |
-| `scene` | `str \| None` | Currently open scene/file |
+| `scene` | `str \| None` | Currently active scene/document |
+| `documents` | `list[str]` | All open documents (empty for single-document DCCs) |
+| `pid` | `int \| None` | OS process ID |
+| `display_name` | `str \| None` | Human-readable label (e.g. `"Maya-Rigging"`) |
 | `metadata` | `dict[str, str]` | Arbitrary metadata |
 | `status` | `ServiceStatus` | Instance status |
 | `transport_address` | `TransportAddress \| None` | Preferred IPC address |

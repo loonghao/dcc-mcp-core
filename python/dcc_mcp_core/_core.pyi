@@ -144,6 +144,7 @@ class SkillMetadata:
     tools: list[ToolDeclaration]
     dcc: str
     tags: list[str]
+    search_hint: str
     scripts: list[str]
     skill_path: str
     version: str
@@ -160,6 +161,7 @@ class SkillMetadata:
         tools: list[ToolDeclaration] | None = None,
         dcc: str = "python",
         tags: list[str] | None = None,
+        search_hint: str = "",
         scripts: list[str] | None = None,
         skill_path: str = "",
         version: str = "1.0.0",
@@ -169,6 +171,54 @@ class SkillMetadata:
         compatibility: str = "",
         allowed_tools: list[str] | None = None,
     ) -> None: ...
+    @property
+    def metadata(self) -> dict[str, Any]:
+        """Arbitrary metadata key-value pairs (agentskills.io + ClawHub)."""
+        ...
+    @metadata.setter
+    def metadata(self, value: Any) -> None: ...
+    @property
+    def policy(self) -> str | None:
+        """Invocation policy as a JSON string, or ``None``.
+
+        Parse with ``json.loads(skill.policy)`` in Python.
+        """
+        ...
+    @policy.setter
+    def policy(self, value: str | None) -> None: ...
+    @property
+    def external_deps(self) -> str | None:
+        """External dependencies as a JSON string, or ``None``.
+
+        Parse with ``json.loads(skill.external_deps)`` in Python.
+        """
+        ...
+    @external_deps.setter
+    def external_deps(self, value: str | None) -> None: ...
+    def is_implicit_invocation_allowed(self) -> bool:
+        """Return ``True`` if implicit invocation is allowed for this skill."""
+        ...
+    def matches_product(self, product: str) -> bool:
+        """Return ``True`` if this skill is available for the given DCC product."""
+        ...
+    def required_env_vars(self) -> list[str]:
+        """Return required environment variables (ClawHub ``metadata.openclaw.requires.env``)."""
+        ...
+    def required_bins(self) -> list[str]:
+        """Return required binaries (ClawHub ``metadata.openclaw.requires.bins``)."""
+        ...
+    def primary_env(self) -> str | None:
+        """Primary credential env var (ClawHub ``primaryEnv``)."""
+        ...
+    def emoji(self) -> str | None:
+        """Emoji display (ClawHub)."""
+        ...
+    def homepage(self) -> str | None:
+        """Homepage URL (ClawHub)."""
+        ...
+    def validate(self) -> list[str]:
+        """Validate spec constraints. Returns a list of warning strings."""
+        ...
     def __repr__(self) -> str: ...
     def __str__(self) -> str: ...
     def __eq__(self, other: object) -> bool: ...
@@ -1325,12 +1375,17 @@ class SkillSummary:
 
     name: str
     description: str
-    version: str
-    dcc: str
+    search_hint: str
     tags: list[str]
+    dcc: str
+    version: str
     tool_count: int
     tool_names: list[str]
     loaded: bool
+    scope: str
+    """Trust level / origin scope (e.g. ``"repo"``, ``"user"``, ``"system"``)."""
+    implicit_invocation: bool
+    """``True`` when this skill declares ``allow_implicit_invocation: false``."""
 
     def __repr__(self) -> str: ...
 
@@ -1603,6 +1658,21 @@ class ServiceEntry:
     port: int
     version: str | None
     scene: str | None
+    documents: list[str]
+    """All documents currently open in this instance.
+
+    Empty for DCCs that only support one document at a time.
+    For multi-document apps each element is a file path.
+    The active document is also reflected in ``scene``.
+    """
+    pid: int | None
+    """OS process ID of the DCC process."""
+    display_name: str | None
+    """Human-readable label for this instance (e.g. ``"Maya-Rigging"``).
+
+    Set by the bridge plugin at registration time.  Displayed by the
+    agent when asking the user to choose between multiple instances.
+    """
     metadata: dict[str, str]
     status: ServiceStatus
     transport_address: TransportAddress | None
@@ -1711,6 +1781,31 @@ class TransportManager:
     def get_service(self, dcc_type: str, instance_id: str) -> ServiceEntry | None: ...
     def heartbeat(self, dcc_type: str, instance_id: str) -> bool: ...
     def update_service_status(self, dcc_type: str, instance_id: str, status: ServiceStatus) -> bool: ...
+    def update_documents(
+        self,
+        dcc_type: str,
+        instance_id: str,
+        active_document: str | None = None,
+        documents: list[str] | None = None,
+        display_name: str | None = None,
+    ) -> bool:
+        """Update documents, active document, and display name for a registered service.
+
+        Used by multi-document DCCs (e.g. Photoshop) to report open documents
+        and the focused document, plus a human-readable display name.
+
+        Args:
+            dcc_type: DCC application type.
+            instance_id: Instance UUID string.
+            active_document: Currently focused document (None = leave unchanged, "" = clear).
+            documents: List of all open documents (None = leave unchanged).
+            display_name: Human-readable label (None = leave unchanged, "" = clear).
+
+        Returns:
+            True if the service was found and updated.
+
+        """
+        ...
     def update_scene(
         self,
         dcc_type: str,
@@ -3687,6 +3782,18 @@ class UsdStage:
     def get_prim(self, path: str) -> UsdPrim | None: ...
     def has_prim(self, path: str) -> bool: ...
     def remove_prim(self, path: str) -> bool: ...
+    def prim_count(self) -> int:
+        """Return the number of prims in the root layer."""
+        ...
+    def list_prims(self) -> list[UsdPrim]:
+        """Return all prims as a list (alias for ``traverse``)."""
+        ...
+    def set_default_prim(self, path: str) -> None:
+        """Set the default prim path (callable method form)."""
+        ...
+    def set_meters_per_unit(self, mpu: float) -> None:
+        """Set the meters per unit value (callable method form)."""
+        ...
     def traverse(self) -> list[UsdPrim]: ...
     def prims_of_type(self, type_name: str) -> list[UsdPrim]: ...
     def set_attribute(self, prim_path: str, attr_name: str, value: VtValue) -> None: ...
@@ -3758,6 +3865,48 @@ class McpHttpConfig:
         ...
     @session_ttl_secs.setter
     def session_ttl_secs(self, secs: int) -> None: ...
+    @property
+    def gateway_port(self) -> int:
+        """Gateway port to compete for. ``0`` disables gateway (default)."""
+        ...
+    @gateway_port.setter
+    def gateway_port(self, port: int) -> None: ...
+    @property
+    def registry_dir(self) -> str | None:
+        """Shared FileRegistry directory path. ``None`` uses a system temp dir."""
+        ...
+    @registry_dir.setter
+    def registry_dir(self, dir: str | None) -> None: ...
+    @property
+    def stale_timeout_secs(self) -> int:
+        """Seconds without heartbeat before an instance is stale. Default: 30."""
+        ...
+    @stale_timeout_secs.setter
+    def stale_timeout_secs(self, secs: int) -> None: ...
+    @property
+    def heartbeat_secs(self) -> int:
+        """Heartbeat interval in seconds. ``0`` disables heartbeat. Default: 5."""
+        ...
+    @heartbeat_secs.setter
+    def heartbeat_secs(self, secs: int) -> None: ...
+    @property
+    def dcc_type(self) -> str | None:
+        """DCC application type (e.g. ``"maya"``). Reported in the shared registry."""
+        ...
+    @dcc_type.setter
+    def dcc_type(self, v: str | None) -> None: ...
+    @property
+    def dcc_version(self) -> str | None:
+        """DCC application version (e.g. ``"2025.1"``)."""
+        ...
+    @dcc_version.setter
+    def dcc_version(self, v: str | None) -> None: ...
+    @property
+    def scene(self) -> str | None:
+        """Currently open scene/file. Improves routing accuracy."""
+        ...
+    @scene.setter
+    def scene(self, v: str | None) -> None: ...
     def __repr__(self) -> str: ...
 
 class ServerHandle:

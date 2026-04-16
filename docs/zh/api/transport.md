@@ -155,7 +155,10 @@ mgr.update_service_status("maya", instance_id, ServiceStatus.BUSY)
 | `host` | `str` | 主机地址 |
 | `port` | `int` | TCP 端口 |
 | `version` | `str \| None` | DCC 版本 |
-| `scene` | `str \| None` | 当前打开的场景/文件 |
+| `scene` | `str \| None` | 当前活跃的场景/文档 |
+| `documents` | `list[str]` | 所有已打开文档（单文档 DCC 为空列表）|
+| `pid` | `int \| None` | 操作系统进程 ID |
+| `display_name` | `str \| None` | 人类可读标签（如 `"Maya-Rigging"`）|
 | `metadata` | `dict[str, str]` | 自定义元数据 |
 | `status` | `ServiceStatus` | 实例状态 |
 | `transport_address` | `TransportAddress \| None` | 首选 IPC 地址 |
