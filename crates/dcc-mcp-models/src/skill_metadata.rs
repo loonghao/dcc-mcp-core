@@ -1493,6 +1493,7 @@ mod tests {
             metadata_files: vec!["help.md".to_string()],
             policy: None,
             external_deps: None,
+            groups: Vec::new(),
         };
         let json = serde_json::to_string(&meta).unwrap();
         let back: SkillMetadata = serde_json::from_str(&json).unwrap();
