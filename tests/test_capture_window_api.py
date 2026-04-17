@@ -55,16 +55,28 @@ class TestCaptureWindowArgValidation:
             # process_id is keyword-only
             cap.capture_window(1234)  # type: ignore[misc]
 
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="window-target lookup only enforced by HwndBackend; Mock accepts any target",
+    )
     def test_accepts_process_id_keyword(self) -> None:
         cap = dcc_mcp_core.Capturer.new_window_auto()
         with pytest.raises((RuntimeError, ValueError)):
             cap.capture_window(process_id=0x7FFFFFFF, timeout_ms=200)
 
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="window-target lookup only enforced by HwndBackend; Mock accepts any target",
+    )
     def test_accepts_window_handle_keyword(self) -> None:
         cap = dcc_mcp_core.Capturer.new_window_auto()
         with pytest.raises((RuntimeError, ValueError)):
             cap.capture_window(window_handle=0x7FFFFFFE, timeout_ms=200)
 
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="window-target lookup only enforced by HwndBackend; Mock accepts any target",
+    )
     def test_accepts_window_title_keyword(self) -> None:
         cap = dcc_mcp_core.Capturer.new_window_auto()
         with pytest.raises((RuntimeError, ValueError)):
