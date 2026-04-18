@@ -27,6 +27,7 @@ use crate::{
     inflight::{CancelToken, InFlightEntry, InFlightRequests, ProgressReporter},
     protocol::{
         self, CallToolParams, CallToolResult, DELTA_TOOLS_METHOD, DELTA_TOOLS_UPDATE_CAP,
+        LAZY_ACTIONS_CAP,
         InitializeResult, JsonRpcBatch, JsonRpcMessage, JsonRpcRequest, JsonRpcResponse,
         ListToolsResult, MCP_SESSION_HEADER, McpTool, McpToolAnnotations, ServerCapabilities,
         ServerInfo, TOOLS_LIST_PAGE_SIZE, ToolsCapability, decode_cursor, encode_cursor,
@@ -347,7 +348,7 @@ async fn handle_initialize(
     // Store the negotiated version on the session for later handlers.
     state.sessions.set_protocol_version(&sid, negotiated);
 
-    // Negotiate vendored delta-tools capability.
+    // Negotiate vendored capabilities.
     let client_wants_delta = req
         .params
         .as_ref()
@@ -360,9 +361,29 @@ async fn handle_initialize(
     state
         .sessions
         .set_supports_delta_tools(&sid, client_wants_delta);
+    let client_wants_lazy_actions = req
+        .params
+        .as_ref()
+        .and_then(|p| p.get("capabilities"))
+        .and_then(|c| c.get("experimental"))
+        .and_then(|e| e.get(LAZY_ACTIONS_CAP))
+        .and_then(|d| d.get("enabled"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    state
+        .sessions
+        .set_supports_lazy_actions(&sid, client_wants_lazy_actions);
 
-    let experimental_caps = if client_wants_delta {
-        Some(json!({ DELTA_TOOLS_UPDATE_CAP: { "enabled": true } }))
+    let effective_lazy_actions = state.lazy_actions || client_wants_lazy_actions;
+    let experimental_caps = if client_wants_delta || effective_lazy_actions {
+        let mut caps = serde_json::Map::new();
+        if client_wants_delta {
+            caps.insert(DELTA_TOOLS_UPDATE_CAP.to_string(), json!({ "enabled": true }));
+        }
+        if effective_lazy_actions {
+            caps.insert(LAZY_ACTIONS_CAP.to_string(), json!({ "enabled": true }));
+        }
+        Some(Value::Object(caps))
     } else {
         None
     };
@@ -401,6 +422,9 @@ async fn handle_tools_list(
     req: &JsonRpcRequest,
     session_id: Option<&str>,
 ) -> Result<JsonRpcResponse, HttpError> {
+    let wants_lazy_actions = session_id
+        .map(|sid| state.sessions.supports_lazy_actions(sid))
+        .unwrap_or(false);
     // 1. Core discovery tools — always fully visible (static, cached once per process)
     let core = build_core_tools();
     let mut tools: Vec<McpTool> = Vec::with_capacity(core.len() + 16);
@@ -410,7 +434,7 @@ async fn handle_tools_list(
     //     let agents drive an arbitrarily large action catalog without paging
     //     through every skill's full schema. Opt-in via
     //     `McpHttpConfig::lazy_actions`.
-    if state.lazy_actions {
+    if state.lazy_actions || wants_lazy_actions {
         tools.extend(build_lazy_action_tools());
     }
 
@@ -496,6 +520,10 @@ async fn handle_tools_call(
     let tool_name = params.name.clone();
 
     // Route core discovery tools
+    let lazy_actions_enabled = state.lazy_actions
+        || session_id
+            .map(|sid| state.sessions.supports_lazy_actions(sid))
+            .unwrap_or(false);
     match tool_name.as_str() {
         "find_skills" => return handle_find_skills(state, req, &params).await,
         "list_skills" => return handle_list_skills(state, req, &params).await,
@@ -511,13 +539,13 @@ async fn handle_tools_call(
         }
         "search_tools" => return handle_search_tools(state, req, &params).await,
         // #254 — lazy-actions fast-path (opt-in).
-        "list_actions" if state.lazy_actions => {
+        "list_actions" if lazy_actions_enabled => {
             return handle_list_actions(state, req, &params).await;
         }
-        "describe_action" if state.lazy_actions => {
+        "describe_action" if lazy_actions_enabled => {
             return handle_describe_action(state, req, &params, session_id).await;
         }
-        "call_action" if state.lazy_actions => {
+        "call_action" if lazy_actions_enabled => {
             return handle_call_action(state, req, &params, session_id).await;
         }
         _ => {}
