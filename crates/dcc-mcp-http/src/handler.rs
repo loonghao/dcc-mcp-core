@@ -26,11 +26,11 @@ use crate::{
     executor::DccExecutorHandle,
     inflight::{CancelToken, InFlightEntry, InFlightRequests, ProgressReporter},
     protocol::{
-        self, CallToolParams, CallToolResult, DELTA_TOOLS_METHOD, DELTA_TOOLS_UPDATE_CAP,
-        InitializeResult, JsonRpcBatch, JsonRpcMessage, JsonRpcRequest, JsonRpcResponse,
-        ListToolsResult, MCP_SESSION_HEADER, McpTool, McpToolAnnotations, ServerCapabilities,
-        ServerInfo, TOOLS_LIST_PAGE_SIZE, ToolsCapability, decode_cursor, encode_cursor,
-        format_sse_event, negotiate_protocol_version,
+        self, CallToolMeta, CallToolParams, CallToolResult, DELTA_TOOLS_METHOD,
+        DELTA_TOOLS_UPDATE_CAP, InitializeResult, JsonRpcBatch, JsonRpcMessage, JsonRpcRequest,
+        JsonRpcResponse, LAZY_ACTIONS_CAP, ListToolsResult, MCP_SESSION_HEADER, McpTool,
+        McpToolAnnotations, ServerCapabilities, ServerInfo, TOOLS_LIST_PAGE_SIZE,
+        ToolsCapability, decode_cursor, encode_cursor, format_sse_event, negotiate_protocol_version,
     },
     session::SessionManager,
 };
@@ -309,7 +309,7 @@ async fn dispatch_request(
     match req.method.as_str() {
         "initialize" => handle_initialize(state, req, session_id).await,
         "notifications/initialized" => Ok(JsonRpcResponse::success(req.id.clone(), json!({}))),
-        "tools/list" => handle_tools_list(state, req).await,
+        "tools/list" => handle_tools_list(state, req, session_id).await,
         "tools/call" => handle_tools_call(state, req, session_id).await,
         "ping" => Ok(JsonRpcResponse::success(req.id.clone(), json!({}))),
         other => Ok(JsonRpcResponse::method_not_found(req.id.clone(), other)),
@@ -343,7 +343,7 @@ async fn handle_initialize(
     // Store the negotiated version on the session for later handlers.
     state.sessions.set_protocol_version(&sid, negotiated);
 
-    // Negotiate vendored delta-tools capability.
+    // Negotiate vendored capabilities.
     let client_wants_delta = req
         .params
         .as_ref()
@@ -356,9 +356,28 @@ async fn handle_initialize(
     state
         .sessions
         .set_supports_delta_tools(&sid, client_wants_delta);
+    let client_wants_lazy_actions = req
+        .params
+        .as_ref()
+        .and_then(|p| p.get("capabilities"))
+        .and_then(|c| c.get("experimental"))
+        .and_then(|e| e.get(LAZY_ACTIONS_CAP))
+        .and_then(|d| d.get("enabled"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    state
+        .sessions
+        .set_supports_lazy_actions(&sid, client_wants_lazy_actions);
 
-    let experimental_caps = if client_wants_delta {
-        Some(json!({ DELTA_TOOLS_UPDATE_CAP: { "enabled": true } }))
+    let experimental_caps = if client_wants_delta || client_wants_lazy_actions {
+        let mut caps = serde_json::Map::new();
+        if client_wants_delta {
+            caps.insert(DELTA_TOOLS_UPDATE_CAP.to_string(), json!({ "enabled": true }));
+        }
+        if client_wants_lazy_actions {
+            caps.insert(LAZY_ACTIONS_CAP.to_string(), json!({ "enabled": true }));
+        }
+        Some(Value::Object(caps))
     } else {
         None
     };
@@ -395,9 +414,18 @@ async fn handle_initialize(
 async fn handle_tools_list(
     state: &AppState,
     req: &JsonRpcRequest,
+    session_id: Option<&str>,
 ) -> Result<JsonRpcResponse, HttpError> {
+    let wants_lazy_actions = session_id
+        .map(|sid| state.sessions.supports_lazy_actions(sid))
+        .unwrap_or(false);
+
     // 1. Core discovery tools — always fully visible (static, cached once per process)
-    let core = build_core_tools();
+    let core = if wants_lazy_actions {
+        build_core_tools_with_lazy_actions()
+    } else {
+        build_core_tools()
+    };
     let mut tools: Vec<McpTool> = Vec::with_capacity(core.len() + 16);
     tools.extend_from_slice(core);
 
@@ -474,6 +502,10 @@ async fn handle_tools_call(
 
     let tool_name = params.name.clone();
 
+    let lazy_actions_enabled = session_id
+        .map(|sid| state.sessions.supports_lazy_actions(sid))
+        .unwrap_or(false);
+
     // Route core discovery tools
     match tool_name.as_str() {
         "find_skills" => return handle_find_skills(state, req, &params).await,
@@ -489,6 +521,15 @@ async fn handle_tools_call(
             return handle_deactivate_tool_group(state, req, &params, session_id).await;
         }
         "search_tools" => return handle_search_tools(state, req, &params).await,
+        "list_actions" if lazy_actions_enabled => {
+            return handle_list_actions_fast(state, req, &params).await;
+        }
+        "describe_action" if lazy_actions_enabled => {
+            return handle_describe_action_fast(state, req, &params).await;
+        }
+        "call_action" if lazy_actions_enabled => {
+            return handle_call_action_fast(state, req, session_id, &params).await;
+        }
         _ => {}
     }
 
@@ -526,55 +567,23 @@ async fn handle_tools_call(
         ));
     }
 
-    // Resolve action params (default to empty object)
-    let call_params = params.arguments.unwrap_or(json!({}));
-
-    // Tool name resolution (#238): <skill>.<name> + backward compat
-    let resolved_name: String = if state.registry.get_action(&tool_name, None).is_some() {
-        tool_name.clone()
-    } else if let Some((skill_part, bare_tool)) = decode_skill_tool_name(&tool_name) {
-        let matched = state
-            .registry
-            .list_actions_by_skill(skill_part)
-            .into_iter()
-            .find(|m| extract_bare_tool_name(skill_part, &m.name) == bare_tool);
-        if let Some(m) = matched {
-            m.name
-        } else {
-            tool_name.clone()
-        }
-    } else {
-        let lm = state.registry.list_actions(None).into_iter().find(|m| {
-            m.skill_name
-                .as_deref()
-                .map(|sn| extract_bare_tool_name(sn, &m.name) == tool_name.as_str())
-                .unwrap_or(false)
-        });
-        if let Some(ref matched) = lm {
-            let canonical =
-                skill_tool_name(matched.skill_name.as_deref().unwrap_or(""), &matched.name)
-                    .unwrap_or_else(|| matched.name.clone());
-            tracing::warn!(bare_name=%tool_name, "Deprecated bare name -- use {canonical}.");
-            matched.name.clone()
-        } else {
-            tool_name.clone()
-        }
-    };
-
-    // Check action exists in registry before dispatch
+    let progress_token = params.meta.as_ref().and_then(|m| m.progress_token.clone());
+    let (resolved_name, call_params) = resolve_action_for_call(state, &tool_name, &params);
     if state.registry.get_action(&resolved_name, None).is_none() {
-        let envelope = DccMcpError::new(
-            "registry",
-            "ACTION_NOT_FOUND",
-            format!("Unknown tool: {tool_name}"),
-        )
-        .with_hint(
-            "Use tools/list to see available tools, or load a skill first with load_skill."
-                .to_string(),
-        );
         return Ok(JsonRpcResponse::success(
             req.id.clone(),
-            serde_json::to_value(CallToolResult::error(envelope.to_json()))?,
+            serde_json::to_value(CallToolResult::error(
+                DccMcpError::new(
+                    "registry",
+                    "ACTION_NOT_FOUND",
+                    format!("Unknown tool: {tool_name}"),
+                )
+                .with_hint(
+                    "Use tools/list to see available tools, or load a skill first with load_skill."
+                        .to_string(),
+                )
+                .to_json(),
+            ))?,
         ));
     }
 
@@ -585,7 +594,6 @@ async fn handle_tools_call(
         other => serde_json::to_string(other).unwrap_or_default(),
     });
 
-    let progress_token = params.meta.as_ref().and_then(|m| m.progress_token.clone());
     let cancel_token = CancelToken::new();
     let progress_reporter = ProgressReporter::new(
         progress_token.clone(),
@@ -755,6 +763,210 @@ async fn handle_tools_call(
             .is_some_and(|(_, recorded_at)| recorded_at.elapsed() < CANCELLED_REQUEST_TTL);
         if cancelled {
             tracing::info!(request_id = %rid, "Suppressing result — request was cancelled");
+            let envelope = DccMcpError::new(
+                "gateway",
+                "REQUEST_CANCELLED",
+                format!("Request {rid} was cancelled by the client."),
+            )
+            .with_hint("Re-send the request if you still need the result.");
+            return Ok(JsonRpcResponse::success(
+                req.id.clone(),
+                serde_json::to_value(CallToolResult::error(envelope.to_json()))?,
+            ));
+        }
+    }
+
+    Ok(JsonRpcResponse::success(
+        req.id.clone(),
+        serde_json::to_value(call_result)?,
+    ))
+}
+
+async fn handle_tools_call_with_params(
+    state: &AppState,
+    req: &JsonRpcRequest,
+    session_id: Option<&str>,
+    params: CallToolParams,
+) -> Result<JsonRpcResponse, HttpError> {
+    let tool_name = params.name.clone();
+    let (resolved_name, call_params) = resolve_action_for_call(state, &tool_name, &params);
+    if state.registry.get_action(&resolved_name, None).is_none() {
+        return Ok(JsonRpcResponse::success(
+            req.id.clone(),
+            serde_json::to_value(CallToolResult::error(
+                DccMcpError::new(
+                    "registry",
+                    "ACTION_NOT_FOUND",
+                    format!("Unknown tool: {tool_name}"),
+                )
+                .with_hint(
+                    "Use tools/list to see available tools, or load a skill first with load_skill."
+                        .to_string(),
+                )
+                .to_json(),
+            ))?,
+        ));
+    }
+
+    let req_id_str: Option<String> = req.id.as_ref().map(|id| match id {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        other => serde_json::to_string(other).unwrap_or_default(),
+    });
+
+    let progress_token = params.meta.as_ref().and_then(|m| m.progress_token.clone());
+    let cancel_token = CancelToken::new();
+    let progress_reporter = ProgressReporter::new(
+        progress_token.clone(),
+        session_id.map(str::to_owned),
+        state.sessions.clone(),
+        req_id_str.clone().unwrap_or_default(),
+    );
+
+    if let Some(ref rid) = req_id_str {
+        let entry = InFlightEntry::new(cancel_token.clone(), progress_reporter.clone());
+        state.in_flight.insert(rid.clone(), entry);
+    }
+
+    if let Some(ref rid) = req_id_str {
+        let already_cancelled = state
+            .cancelled_requests
+            .get(rid)
+            .is_some_and(|ts| ts.elapsed() < CANCELLED_REQUEST_TTL);
+        if already_cancelled {
+            state.in_flight.remove(rid);
+            state.cancelled_requests.remove(rid);
+            let envelope = DccMcpError::new(
+                "registry",
+                "CANCELLED",
+                format!("Request {rid} was cancelled before dispatch."),
+            )
+            .with_hint("Re-send the request if you still need the result.");
+            return Ok(JsonRpcResponse::success(
+                req.id.clone(),
+                serde_json::to_value(CallToolResult::error(envelope.to_json()))?,
+            ));
+        }
+    }
+
+    let cancel_token_for_dispatch = cancel_token.clone();
+    let dispatch_outcome = if let Some(exec) = &state.executor {
+        let dispatcher = state.dispatcher.clone();
+        let name = resolved_name.clone();
+        let p = call_params.clone();
+        let ct = cancel_token_for_dispatch;
+        exec.execute(Box::new(move || {
+            if ct.is_cancelled() {
+                return serde_json::to_string(&json!({"__dispatch_error": "CANCELLED"}))
+                    .unwrap_or_default();
+            }
+            match dispatcher.dispatch(&name, p) {
+                Ok(r) => serde_json::to_string(&r.output).unwrap_or_else(|_| "null".to_string()),
+                Err(e) => serde_json::to_string(&json!({"__dispatch_error": e.to_string()}))
+                    .unwrap_or_default(),
+            }
+        }))
+        .await
+        .map(|json_str| {
+            let v: Value = serde_json::from_str(&json_str).unwrap_or(json!({}));
+            if let Some(err) = v.get("__dispatch_error") {
+                Err(err.as_str().unwrap_or("dispatch error").to_string())
+            } else {
+                Ok(v)
+            }
+        })
+        .unwrap_or_else(|e| Err(e.to_string()))
+    } else {
+        let dispatcher = state.dispatcher.clone();
+        let name = resolved_name.clone();
+        let p = call_params.clone();
+        let ct_for_block = cancel_token_for_dispatch.clone();
+        let dispatch_fut = tokio::task::spawn_blocking(move || {
+            if ct_for_block.is_cancelled() {
+                return Err("CANCELLED".to_string());
+            }
+            dispatcher
+                .dispatch(&name, p)
+                .map(|r| r.output)
+                .map_err(|e| e.to_string())
+        });
+        tokio::select! {
+            result = dispatch_fut => { result.map_err(|e| e.to_string()).and_then(|r| r) }
+            _ = async {
+                let deadline = tokio::time::Instant::now() + crate::inflight::CANCEL_GRACE_PERIOD;
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    if cancel_token_for_dispatch.is_cancelled() || tokio::time::Instant::now() >= deadline { break; }
+                }
+            } => { Err("CANCELLED".to_string()) }
+        }
+    };
+
+    if let Some(ref rid) = req_id_str {
+        state.in_flight.remove(rid);
+    }
+
+    let call_result = match dispatch_outcome {
+        Ok(output) => {
+            let text = match &output {
+                Value::String(s) => s.clone(),
+                Value::Null => String::new(),
+                other => serde_json::to_string_pretty(other).unwrap_or_else(|_| other.to_string()),
+            };
+            let mut content = vec![protocol::ToolContent::Text { text }];
+            if let Some(sid) = session_id {
+                let version = state.sessions.get_protocol_version(sid);
+                if version.as_deref() == Some("2025-06-18") {
+                    content.extend(crate::resource_link::extract_resource_links(&output));
+                }
+            }
+            CallToolResult {
+                content,
+                is_error: false,
+            }
+        }
+        Err(err_msg) if err_msg == "CANCELLED" => {
+            let rid = req_id_str.as_deref().unwrap_or("unknown");
+            if let Some(ref r) = req_id_str {
+                state.cancelled_requests.remove(r);
+            }
+            let envelope = DccMcpError::new(
+                "registry",
+                "CANCELLED",
+                format!("Request {rid} was cancelled by the client."),
+            )
+            .with_hint("Re-send the request if you still need the result.");
+            return Ok(JsonRpcResponse::success(
+                req.id.clone(),
+                serde_json::to_value(CallToolResult::error(envelope.to_json()))?,
+            ));
+        }
+        Err(err_msg) => {
+            let envelope = if err_msg.contains("no handler registered") {
+                DccMcpError::new(
+                    "instance",
+                    "NO_HANDLER",
+                    format!("Tool '{tool_name}' is registered but has no handler."),
+                )
+                .with_hint("Register a handler via ActionDispatcher.register_handler().")
+            } else {
+                DccMcpError::new("instance", "EXECUTION_FAILED", &err_msg)
+            };
+            CallToolResult {
+                content: vec![protocol::ToolContent::Text {
+                    text: envelope.to_json(),
+                }],
+                is_error: true,
+            }
+        }
+    };
+
+    if let Some(ref rid) = req_id_str {
+        let cancelled = state
+            .cancelled_requests
+            .remove(rid)
+            .is_some_and(|(_, recorded_at)| recorded_at.elapsed() < CANCELLED_REQUEST_TTL);
+        if cancelled {
             let envelope = DccMcpError::new(
                 "gateway",
                 "REQUEST_CANCELLED",
@@ -1064,10 +1276,20 @@ async fn handle_unload_skill(
 /// subsequent request, eliminating a handful of `String::from` / `json!` allocations
 /// per request.
 static CORE_TOOLS_CACHE: OnceLock<Vec<McpTool>> = OnceLock::new();
+static CORE_TOOLS_WITH_LAZY_CACHE: OnceLock<Vec<McpTool>> = OnceLock::new();
 
 /// Return the core discovery tools, building and caching them on the first call.
 fn build_core_tools() -> &'static [McpTool] {
     CORE_TOOLS_CACHE.get_or_init(build_core_tools_inner)
+}
+
+/// Return the core discovery tools plus lazy-action fast-path tools.
+fn build_core_tools_with_lazy_actions() -> &'static [McpTool] {
+    CORE_TOOLS_WITH_LAZY_CACHE.get_or_init(|| {
+        let mut tools = build_core_tools_inner();
+        tools.extend(build_lazy_action_core_tools());
+        tools
+    })
 }
 
 /// Inner builder — called exactly once per process lifetime.
@@ -1644,6 +1866,121 @@ async fn handle_search_tools(
     ))
 }
 
+/// Handle ``list_actions`` (lazy-action fast-path).
+///
+/// Returns compact metadata only: `{id, summary, tags}`.
+async fn handle_list_actions_fast(
+    state: &AppState,
+    req: &JsonRpcRequest,
+    _params: &CallToolParams,
+) -> Result<JsonRpcResponse, HttpError> {
+    let actions = state.registry.list_actions(None);
+    let list: Vec<Value> = actions
+        .iter()
+        .filter(|m| m.enabled)
+        .map(|m| {
+            json!({
+                "id": action_meta_to_mcp_tool(m).name,
+                "summary": m.description,
+                "tags": m.tags,
+            })
+        })
+        .collect();
+
+    let result = json!({
+        "total": list.len(),
+        "actions": list,
+    });
+    Ok(JsonRpcResponse::success(
+        req.id.clone(),
+        serde_json::to_value(CallToolResult::text(serde_json::to_string(&result)?))?,
+    ))
+}
+
+/// Handle ``describe_action`` (lazy-action fast-path).
+///
+/// Returns the same schema body exposed by `tools/list` for a single action.
+async fn handle_describe_action_fast(
+    state: &AppState,
+    req: &JsonRpcRequest,
+    params: &CallToolParams,
+) -> Result<JsonRpcResponse, HttpError> {
+    let action_id = params
+        .arguments
+        .as_ref()
+        .and_then(|a| a.get("id"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if action_id.is_empty() {
+        return Ok(JsonRpcResponse::success(
+            req.id.clone(),
+            serde_json::to_value(CallToolResult::error("Missing required parameter: id"))?,
+        ));
+    }
+
+    let resolved = resolve_tool_name(state, action_id);
+    let Some(meta) = state.registry.get_action(&resolved, None) else {
+        let envelope = DccMcpError::new(
+            "registry",
+            "ACTION_NOT_FOUND",
+            format!("Unknown action id: {action_id}"),
+        )
+        .with_hint("Use list_actions to enumerate callable ids.");
+        return Ok(JsonRpcResponse::success(
+            req.id.clone(),
+            serde_json::to_value(CallToolResult::error(envelope.to_json()))?,
+        ));
+    };
+    let tool = action_meta_to_mcp_tool(&meta);
+    Ok(JsonRpcResponse::success(
+        req.id.clone(),
+        serde_json::to_value(CallToolResult::text(serde_json::to_string(&tool)?))?,
+    ))
+}
+
+/// Handle ``call_action`` (lazy-action fast-path).
+///
+/// Delegates through the same `tools/call` path by transforming into a virtual
+/// `CallToolParams` and then reusing the canonical dispatch flow.
+async fn handle_call_action_fast(
+    state: &AppState,
+    req: &JsonRpcRequest,
+    session_id: Option<&str>,
+    params: &CallToolParams,
+) -> Result<JsonRpcResponse, HttpError> {
+    let action_id = params
+        .arguments
+        .as_ref()
+        .and_then(|a| a.get("id"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if action_id.is_empty() {
+        return Ok(JsonRpcResponse::success(
+            req.id.clone(),
+            serde_json::to_value(CallToolResult::error("Missing required parameter: id"))?,
+        ));
+    }
+    let args = params
+        .arguments
+        .as_ref()
+        .and_then(|a| a.get("args"))
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    if !args.is_object() {
+        return Ok(JsonRpcResponse::success(
+            req.id.clone(),
+            serde_json::to_value(CallToolResult::error("Parameter args must be an object"))?,
+        ));
+    }
+
+    let bridged = CallToolParams {
+        name: action_id.to_string(),
+        arguments: Some(args),
+        meta: Some(CallToolMeta::default()),
+    };
+    handle_tools_call_with_params(state, req, session_id, bridged).await
+}
+
 /// Send a `notifications/tools/list_changed` event to a session's SSE subscribers.
 fn notify_tools_list_changed(sessions: &SessionManager, session_id: &str) {
     let notification = json!({
@@ -1683,6 +2020,104 @@ fn notify_tools_changed(
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
+
+fn resolve_tool_name(state: &AppState, tool_name: &str) -> String {
+    if state.registry.get_action(tool_name, None).is_some() {
+        return tool_name.to_string();
+    }
+    if let Some((skill_part, bare_tool)) = decode_skill_tool_name(tool_name) {
+        if let Some(m) = state
+            .registry
+            .list_actions_by_skill(skill_part)
+            .into_iter()
+            .find(|m| extract_bare_tool_name(skill_part, &m.name) == bare_tool)
+        {
+            return m.name;
+        }
+        return tool_name.to_string();
+    }
+
+    let lm = state.registry.list_actions(None).into_iter().find(|m| {
+        m.skill_name
+            .as_deref()
+            .map(|sn| extract_bare_tool_name(sn, &m.name) == tool_name)
+            .unwrap_or(false)
+    });
+    if let Some(ref matched) = lm {
+        let canonical = skill_tool_name(matched.skill_name.as_deref().unwrap_or(""), &matched.name)
+            .unwrap_or_else(|| matched.name.clone());
+        tracing::warn!(bare_name=%tool_name, "Deprecated bare name -- use {canonical}.");
+        matched.name.clone()
+    } else {
+        tool_name.to_string()
+    }
+}
+
+fn resolve_action_for_call(
+    state: &AppState,
+    tool_name: &str,
+    params: &CallToolParams,
+) -> (String, Value) {
+    let resolved_name = resolve_tool_name(state, tool_name);
+    let call_params = params.arguments.clone().unwrap_or(json!({}));
+    (resolved_name, call_params)
+}
+
+fn build_lazy_action_core_tools() -> Vec<McpTool> {
+    vec![
+        McpTool {
+            name: "list_actions".to_string(),
+            description: "List loaded callable actions as compact entries: id, summary, tags."
+                .to_string(),
+            input_schema: json!({"type":"object","properties":{}}),
+            annotations: Some(McpToolAnnotations {
+                title: Some("List Actions".to_string()),
+                read_only_hint: Some(true),
+                destructive_hint: Some(false),
+                idempotent_hint: Some(true),
+                open_world_hint: Some(false),
+                deferred_hint: Some(false),
+            }),
+        },
+        McpTool {
+            name: "describe_action".to_string(),
+            description: "Get the full schema/metadata for one action id.".to_string(),
+            input_schema: json!({
+                "type":"object",
+                "properties":{"id":{"type":"string","description":"Action id from list_actions"}},
+                "required":["id"]
+            }),
+            annotations: Some(McpToolAnnotations {
+                title: Some("Describe Action".to_string()),
+                read_only_hint: Some(true),
+                destructive_hint: Some(false),
+                idempotent_hint: Some(true),
+                open_world_hint: Some(false),
+                deferred_hint: Some(false),
+            }),
+        },
+        McpTool {
+            name: "call_action".to_string(),
+            description: "Call an action by id using generic args object.".to_string(),
+            input_schema: json!({
+                "type":"object",
+                "properties":{
+                    "id":{"type":"string","description":"Action id from list_actions"},
+                    "args":{"type":"object","description":"Arguments object for the action","default":{}}
+                },
+                "required":["id"]
+            }),
+            annotations: Some(McpToolAnnotations {
+                title: Some("Call Action".to_string()),
+                read_only_hint: Some(false),
+                destructive_hint: Some(false),
+                idempotent_hint: Some(false),
+                open_world_hint: Some(false),
+                deferred_hint: Some(false),
+            }),
+        },
+    ]
+}
 
 fn parse_raw_values(body: &str) -> Result<Vec<Value>, serde_json::Error> {
     if body.trim_start().starts_with('[') {

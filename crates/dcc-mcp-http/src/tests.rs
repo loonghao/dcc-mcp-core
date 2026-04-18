@@ -1820,6 +1820,174 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_initialize_negotiates_lazy_actions_capability() {
+        let server = TestServer::new(make_router_with_skill());
+        let resp = server
+            .post("/mcp")
+            .add_header(
+                axum::http::header::ACCEPT,
+                "application/json".parse::<HeaderValue>().unwrap(),
+            )
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0", "id": 90, "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {
+                        "experimental": {
+                            "dcc_mcp_core/lazyActions": { "enabled": true }
+                        }
+                    },
+                    "clientInfo": {"name": "lazy-client", "version": "1.0"}
+                }
+            }))
+            .await;
+        resp.assert_status_ok();
+        let body: Value = resp.json();
+        let exp = &body["result"]["capabilities"]["experimental"];
+        assert_eq!(
+            exp["dcc_mcp_core/lazyActions"]["enabled"], true,
+            "Server must echo lazyActions capability: {exp}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tools_list_includes_lazy_fast_path_tools_when_enabled() {
+        let server = TestServer::new(make_router_with_handler());
+
+        let init = server
+            .post("/mcp")
+            .add_header(
+                axum::http::header::ACCEPT,
+                "application/json".parse::<HeaderValue>().unwrap(),
+            )
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0", "id": 91, "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {
+                        "experimental": {
+                            "dcc_mcp_core/lazyActions": { "enabled": true }
+                        }
+                    },
+                    "clientInfo": {"name": "lazy-client", "version": "1.0"}
+                }
+            }))
+            .await;
+        init.assert_status_ok();
+        let init_body: Value = init.json();
+        let session_id = init_body["result"]["__session_id"]
+            .as_str()
+            .expect("session id");
+
+        let list = server
+            .post("/mcp")
+            .add_header(
+                axum::http::header::ACCEPT,
+                "application/json".parse::<HeaderValue>().unwrap(),
+            )
+            .add_header(
+                axum::http::HeaderName::from_static("mcp-session-id"),
+                session_id.parse::<HeaderValue>().unwrap(),
+            )
+            .json(&serde_json::json!({"jsonrpc":"2.0","id":92,"method":"tools/list"}))
+            .await;
+        list.assert_status_ok();
+        let body: Value = list.json();
+        let names: Vec<&str> = body["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap())
+            .collect();
+        assert!(
+            names.contains(&"list_actions"),
+            "Expected list_actions in tools/list with lazyActions enabled: {names:?}"
+        );
+        assert!(
+            names.contains(&"describe_action"),
+            "Expected describe_action in tools/list with lazyActions enabled: {names:?}"
+        );
+        assert!(
+            names.contains(&"call_action"),
+            "Expected call_action in tools/list with lazyActions enabled: {names:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_lazy_fast_path_call_action_matches_direct_tools_call() {
+        let server = TestServer::new(make_router_with_handler());
+
+        let init = server
+            .post("/mcp")
+            .add_header(
+                axum::http::header::ACCEPT,
+                "application/json".parse::<HeaderValue>().unwrap(),
+            )
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0", "id": 93, "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {
+                        "experimental": {
+                            "dcc_mcp_core/lazyActions": { "enabled": true }
+                        }
+                    },
+                    "clientInfo": {"name": "lazy-client", "version": "1.0"}
+                }
+            }))
+            .await;
+        let init_body: Value = init.json();
+        let session_id = init_body["result"]["__session_id"]
+            .as_str()
+            .expect("session id");
+
+        let direct = server
+            .post("/mcp")
+            .add_header(
+                axum::http::header::ACCEPT,
+                "application/json".parse::<HeaderValue>().unwrap(),
+            )
+            .add_header(
+                axum::http::HeaderName::from_static("mcp-session-id"),
+                session_id.parse::<HeaderValue>().unwrap(),
+            )
+            .json(&serde_json::json!({
+                "jsonrpc":"2.0","id":94,"method":"tools/call",
+                "params":{"name":"get_scene_info","arguments":{}}
+            }))
+            .await;
+        direct.assert_status_ok();
+        let direct_body: Value = direct.json();
+
+        let fast = server
+            .post("/mcp")
+            .add_header(
+                axum::http::header::ACCEPT,
+                "application/json".parse::<HeaderValue>().unwrap(),
+            )
+            .add_header(
+                axum::http::HeaderName::from_static("mcp-session-id"),
+                session_id.parse::<HeaderValue>().unwrap(),
+            )
+            .json(&serde_json::json!({
+                "jsonrpc":"2.0","id":95,"method":"tools/call",
+                "params":{"name":"call_action","arguments":{"id":"get_scene_info","args":{}}}
+            }))
+            .await;
+        fast.assert_status_ok();
+        let fast_body: Value = fast.json();
+
+        assert_eq!(direct_body["result"]["isError"], false);
+        assert_eq!(fast_body["result"]["isError"], false);
+        let direct_text = direct_body["result"]["content"][0]["text"].as_str().unwrap();
+        let fast_text = fast_body["result"]["content"][0]["text"].as_str().unwrap();
+        assert_eq!(
+            direct_text, fast_text,
+            "call_action should dispatch identically to direct tool call"
+        );
+    }
+
+    #[tokio::test]
     async fn test_initialize_no_delta_when_not_requested() {
         let server = TestServer::new(make_router_with_skill());
         let body: Value = server

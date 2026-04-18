@@ -32,6 +32,8 @@ pub const MCP_SESSION_HEADER: &str = "Mcp-Session-Id";
 
 /// Vendored capability key for delta tools notifications.
 pub const DELTA_TOOLS_UPDATE_CAP: &str = "dcc_mcp_core/deltaToolsUpdate";
+/// Vendored capability key for optional lazy action fast-path tools.
+pub const LAZY_ACTIONS_CAP: &str = "dcc_mcp_core/lazyActions";
 
 /// Method name for vendored delta tools update notifications.
 pub const DELTA_TOOLS_METHOD: &str = "notifications/tools/delta";

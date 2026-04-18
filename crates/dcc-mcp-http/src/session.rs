@@ -29,6 +29,8 @@ pub struct McpSession {
     pub protocol_version: Option<String>,
     /// Whether the client opted into delta tools notifications.
     pub supports_delta_tools: bool,
+    /// Whether the client opted into lazy action fast-path tools.
+    pub supports_lazy_actions: bool,
     /// Broadcast channel for server-push SSE events.
     pub sse_tx: broadcast::Sender<String>,
     /// Wall-clock time of the last request handled for this session.
@@ -51,6 +53,7 @@ impl McpSession {
             initialized: false,
             protocol_version: None,
             supports_delta_tools: false,
+            supports_lazy_actions: false,
             sse_tx,
             last_active: Instant::now(),
         }
@@ -147,6 +150,24 @@ impl SessionManager {
         self.sessions
             .get(session_id)
             .map(|s| s.supports_delta_tools)
+            .unwrap_or(false)
+    }
+
+    /// Record whether the client opted into lazy action tools.
+    pub fn set_supports_lazy_actions(&self, session_id: &str, enabled: bool) -> bool {
+        if let Some(mut s) = self.sessions.get_mut(session_id) {
+            s.supports_lazy_actions = enabled;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Whether the client for `session_id` opted into lazy action tools.
+    pub fn supports_lazy_actions(&self, session_id: &str) -> bool {
+        self.sessions
+            .get(session_id)
+            .map(|s| s.supports_lazy_actions)
             .unwrap_or(false)
     }
 
