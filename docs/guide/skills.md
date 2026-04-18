@@ -120,12 +120,11 @@ info = catalog.get_skill_info("maya-geometry")  # dict with full details or None
 |-------|------|-------------|
 | `name` | `str` | Skill name |
 | `description` | `str` | Short description |
-| `search_hint` | `str` | Keyword hint for discovery (from `search-hint:` in SKILL.md; falls back to `description`) |
-| `tags` | `List[str]` | Skill tags |
+| `tags` | `list[str]` | Skill tags |
 | `dcc` | `str` | Target DCC (e.g. `"maya"`) |
 | `version` | `str` | Skill version |
 | `tool_count` | `int` | Number of declared tools |
-| `tool_names` | `List[str]` | Names of declared tools |
+| `tool_names` | `list[str]` | Names of declared tools |
 | `loaded` | `bool` | Whether the skill is currently loaded |
 
 ## ToolDeclaration
@@ -300,16 +299,18 @@ Parsed from SKILL.md frontmatter. Supports Anthropic Skills, ClawHub/OpenClaw, a
 |-------|------|-------------|
 | `name` | `str` | Unique skill name |
 | `description` | `str` | Short description |
-| `search_hint` | `str` | Keyword hint for `search_skills` (SKILL.md `search-hint:` field; falls back to `description`) |
-| `tools` | `List[str]` | Tool names listed in frontmatter |
+| `tools` | `list[ToolDeclaration]` | Declared tools parsed from SKILL.md |
 | `dcc` | `str` | Target DCC application (default: `"python"`) |
-| `tags` | `List[str]` | Classification tags |
-| `scripts` | `List[str]` | Discovered script file paths |
+| `tags` | `list[str]` | Classification tags |
+| `scripts` | `list[str]` | Discovered script file paths |
 | `skill_path` | `str` | Absolute path to the skill directory |
 | `version` | `str` | Skill version (default: `"1.0.0"`) |
-| `depends` | `List[str]` | Skill dependency names |
-| `metadata_files` | `List[str]` | Paths to `.md` files in `metadata/` |
-| `groups` | `List[SkillGroup]` | Tool groups for progressive exposure (see below) |
+| `depends` | `list[str]` | Skill dependency names |
+| `metadata_files` | `list[str]` | Paths to `.md` files in `metadata/` |
+| `license` | `str` | License identifier |
+| `compatibility` | `str` | Compatibility string |
+| `allowed_tools` | `list[str]` | Allowed tool names |
+| `groups` | `list[SkillGroup]` | Tool groups for progressive exposure (see below) |
 
 ## Tool Groups (Progressive Exposure)
 

@@ -164,6 +164,9 @@ Represents a discovered DCC service instance.
 | `port` | `int` | TCP port |
 | `version` | `str \| None` | DCC version |
 | `scene` | `str \| None` | Currently open scene/file |
+| `documents` | `list[str]` | All open documents for multi-document apps |
+| `pid` | `int \| None` | OS process ID (disambiguates instances with the same scene) |
+| `display_name` | `str \| None` | Human-readable label, e.g. `"Maya-Rigging"` |
 | `metadata` | `dict[str, str]` | Arbitrary string-only metadata |
 | `extras` | `dict[str, Any]` | JSON-typed DCC metadata (e.g. `cdp_port`, `pid`, nested config) — empty dict when unset |
 | `status` | `ServiceStatus` | Instance status |
@@ -216,7 +219,7 @@ mgr = TransportManager(
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `register_service(dcc_type, host, port, version=None, scene=None, metadata=None, transport_address=None, extras=None)` | `str` | Register a service, returns instance_id (UUID). `extras` accepts a `dict[str, Any]` of JSON-typed metadata (nested dicts / lists / numbers allowed) |
+| `register_service(dcc_type, host, port, version=None, scene=None, documents=None, pid=None, display_name=None, metadata=None, transport_address=None, extras=None)` | `str` | Register a service, returns instance_id (UUID). `extras` accepts a `dict[str, Any]` of JSON-typed metadata (nested dicts / lists / numbers allowed) |
 | `deregister_service(dcc_type, instance_id)` | `bool` | Deregister a service by key |
 | `list_instances(dcc_type)` | `list[ServiceEntry]` | List all instances for a DCC type |
 | `list_all_services()` | `list[ServiceEntry]` | List all registered services |
