@@ -26,11 +26,11 @@ use crate::{
     executor::DccExecutorHandle,
     inflight::{CancelToken, InFlightEntry, InFlightRequests, ProgressReporter},
     protocol::{
-        self, CallToolMeta, CallToolParams, CallToolResult, DELTA_TOOLS_METHOD,
-        DELTA_TOOLS_UPDATE_CAP, InitializeResult, JsonRpcBatch, JsonRpcMessage, JsonRpcRequest,
-        JsonRpcResponse, LAZY_ACTIONS_CAP, ListToolsResult, MCP_SESSION_HEADER, McpTool,
-        McpToolAnnotations, ServerCapabilities, ServerInfo, TOOLS_LIST_PAGE_SIZE,
-        ToolsCapability, decode_cursor, encode_cursor, format_sse_event, negotiate_protocol_version,
+        self, CallToolParams, CallToolResult, DELTA_TOOLS_METHOD, DELTA_TOOLS_UPDATE_CAP,
+        InitializeResult, JsonRpcBatch, JsonRpcMessage, JsonRpcRequest, JsonRpcResponse,
+        ListToolsResult, MCP_SESSION_HEADER, McpTool, McpToolAnnotations, ServerCapabilities,
+        ServerInfo, TOOLS_LIST_PAGE_SIZE, ToolsCapability, decode_cursor, encode_cursor,
+        format_sse_event, negotiate_protocol_version,
     },
     session::SessionManager,
 };
@@ -69,6 +69,10 @@ pub struct AppState {
     /// every 60 seconds to keep this map bounded.
     pub cancelled_requests: Arc<DashMap<String, Instant>>,
     pub in_flight: InFlightRequests,
+    /// When `true`, `tools/list` surfaces the three lazy-action meta-tools
+    /// (`list_actions`, `describe_action`, `call_action`) and the dispatcher
+    /// accepts them. See [`crate::McpHttpConfig::lazy_actions`] (#254).
+    pub lazy_actions: bool,
 }
 
 impl AppState {
@@ -343,7 +347,7 @@ async fn handle_initialize(
     // Store the negotiated version on the session for later handlers.
     state.sessions.set_protocol_version(&sid, negotiated);
 
-    // Negotiate vendored capabilities.
+    // Negotiate vendored delta-tools capability.
     let client_wants_delta = req
         .params
         .as_ref()
@@ -356,28 +360,9 @@ async fn handle_initialize(
     state
         .sessions
         .set_supports_delta_tools(&sid, client_wants_delta);
-    let client_wants_lazy_actions = req
-        .params
-        .as_ref()
-        .and_then(|p| p.get("capabilities"))
-        .and_then(|c| c.get("experimental"))
-        .and_then(|e| e.get(LAZY_ACTIONS_CAP))
-        .and_then(|d| d.get("enabled"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    state
-        .sessions
-        .set_supports_lazy_actions(&sid, client_wants_lazy_actions);
 
-    let experimental_caps = if client_wants_delta || client_wants_lazy_actions {
-        let mut caps = serde_json::Map::new();
-        if client_wants_delta {
-            caps.insert(DELTA_TOOLS_UPDATE_CAP.to_string(), json!({ "enabled": true }));
-        }
-        if client_wants_lazy_actions {
-            caps.insert(LAZY_ACTIONS_CAP.to_string(), json!({ "enabled": true }));
-        }
-        Some(Value::Object(caps))
+    let experimental_caps = if client_wants_delta {
+        Some(json!({ DELTA_TOOLS_UPDATE_CAP: { "enabled": true } }))
     } else {
         None
     };
@@ -416,18 +401,26 @@ async fn handle_tools_list(
     req: &JsonRpcRequest,
     session_id: Option<&str>,
 ) -> Result<JsonRpcResponse, HttpError> {
-    let wants_lazy_actions = session_id
-        .map(|sid| state.sessions.supports_lazy_actions(sid))
-        .unwrap_or(false);
-
     // 1. Core discovery tools — always fully visible (static, cached once per process)
-    let core = if wants_lazy_actions {
-        build_core_tools_with_lazy_actions()
-    } else {
-        build_core_tools()
-    };
+    let core = build_core_tools();
     let mut tools: Vec<McpTool> = Vec::with_capacity(core.len() + 16);
     tools.extend_from_slice(core);
+
+    // 1b. Optional lazy-actions fast-path (#254) — three extra meta-tools that
+    //     let agents drive an arbitrarily large action catalog without paging
+    //     through every skill's full schema. Opt-in via
+    //     `McpHttpConfig::lazy_actions`.
+    if state.lazy_actions {
+        tools.extend(build_lazy_action_tools());
+    }
+
+    // #242 — ``outputSchema`` is only valid on 2025-06-18 sessions. On
+    // 2025-03-26 we strip it so compliant clients never see a field they
+    // cannot process.
+    let include_output_schema = session_id
+        .and_then(|sid| state.sessions.get_protocol_version(sid))
+        .as_deref()
+        == Some("2025-06-18");
 
     // 2. Loaded skill tools — full definitions from ActionRegistry.
     //    Tools in inactive groups are collapsed into one ``__group__<name>``
@@ -437,7 +430,7 @@ async fn handle_tools_list(
         std::collections::BTreeMap::new();
     for meta in &actions {
         if meta.enabled {
-            tools.push(action_meta_to_mcp_tool(meta));
+            tools.push(action_meta_to_mcp_tool(meta, include_output_schema));
         } else if !meta.group.is_empty() {
             inactive_groups
                 .entry(meta.group.clone())
@@ -502,10 +495,6 @@ async fn handle_tools_call(
 
     let tool_name = params.name.clone();
 
-    let lazy_actions_enabled = session_id
-        .map(|sid| state.sessions.supports_lazy_actions(sid))
-        .unwrap_or(false);
-
     // Route core discovery tools
     match tool_name.as_str() {
         "find_skills" => return handle_find_skills(state, req, &params).await,
@@ -521,14 +510,15 @@ async fn handle_tools_call(
             return handle_deactivate_tool_group(state, req, &params, session_id).await;
         }
         "search_tools" => return handle_search_tools(state, req, &params).await,
-        "list_actions" if lazy_actions_enabled => {
-            return handle_list_actions_fast(state, req, &params).await;
+        // #254 — lazy-actions fast-path (opt-in).
+        "list_actions" if state.lazy_actions => {
+            return handle_list_actions(state, req, &params).await;
         }
-        "describe_action" if lazy_actions_enabled => {
-            return handle_describe_action_fast(state, req, &params).await;
+        "describe_action" if state.lazy_actions => {
+            return handle_describe_action(state, req, &params, session_id).await;
         }
-        "call_action" if lazy_actions_enabled => {
-            return handle_call_action_fast(state, req, session_id, &params).await;
+        "call_action" if state.lazy_actions => {
+            return handle_call_action(state, req, &params, session_id).await;
         }
         _ => {}
     }
@@ -567,23 +557,55 @@ async fn handle_tools_call(
         ));
     }
 
-    let progress_token = params.meta.as_ref().and_then(|m| m.progress_token.clone());
-    let (resolved_name, call_params) = resolve_action_for_call(state, &tool_name, &params);
+    // Resolve action params (default to empty object)
+    let call_params = params.arguments.unwrap_or(json!({}));
+
+    // Tool name resolution (#238): <skill>.<name> + backward compat
+    let resolved_name: String = if state.registry.get_action(&tool_name, None).is_some() {
+        tool_name.clone()
+    } else if let Some((skill_part, bare_tool)) = decode_skill_tool_name(&tool_name) {
+        let matched = state
+            .registry
+            .list_actions_by_skill(skill_part)
+            .into_iter()
+            .find(|m| extract_bare_tool_name(skill_part, &m.name) == bare_tool);
+        if let Some(m) = matched {
+            m.name
+        } else {
+            tool_name.clone()
+        }
+    } else {
+        let lm = state.registry.list_actions(None).into_iter().find(|m| {
+            m.skill_name
+                .as_deref()
+                .map(|sn| extract_bare_tool_name(sn, &m.name) == tool_name.as_str())
+                .unwrap_or(false)
+        });
+        if let Some(ref matched) = lm {
+            let canonical =
+                skill_tool_name(matched.skill_name.as_deref().unwrap_or(""), &matched.name)
+                    .unwrap_or_else(|| matched.name.clone());
+            tracing::warn!(bare_name=%tool_name, "Deprecated bare name -- use {canonical}.");
+            matched.name.clone()
+        } else {
+            tool_name.clone()
+        }
+    };
+
+    // Check action exists in registry before dispatch
     if state.registry.get_action(&resolved_name, None).is_none() {
+        let envelope = DccMcpError::new(
+            "registry",
+            "ACTION_NOT_FOUND",
+            format!("Unknown tool: {tool_name}"),
+        )
+        .with_hint(
+            "Use tools/list to see available tools, or load a skill first with load_skill."
+                .to_string(),
+        );
         return Ok(JsonRpcResponse::success(
             req.id.clone(),
-            serde_json::to_value(CallToolResult::error(
-                DccMcpError::new(
-                    "registry",
-                    "ACTION_NOT_FOUND",
-                    format!("Unknown tool: {tool_name}"),
-                )
-                .with_hint(
-                    "Use tools/list to see available tools, or load a skill first with load_skill."
-                        .to_string(),
-                )
-                .to_json(),
-            ))?,
+            serde_json::to_value(CallToolResult::error(envelope.to_json()))?,
         ));
     }
 
@@ -594,6 +616,7 @@ async fn handle_tools_call(
         other => serde_json::to_string(other).unwrap_or_default(),
     });
 
+    let progress_token = params.meta.as_ref().and_then(|m| m.progress_token.clone());
     let cancel_token = CancelToken::new();
     let progress_reporter = ProgressReporter::new(
         progress_token.clone(),
@@ -704,18 +727,33 @@ async fn handle_tools_call(
             };
             let mut content = vec![protocol::ToolContent::Text { text }];
 
-            // #243 — on MCP 2025-06-18 sessions, surface artifact files as
-            // `resource_link` content items so agents can resolve them on
-            // demand instead of receiving base64 blobs in the response.
-            if let Some(sid) = session_id {
-                let version = state.sessions.get_protocol_version(sid);
-                if version.as_deref() == Some("2025-06-18") {
-                    content.extend(crate::resource_link::extract_resource_links(&output));
-                }
+            // #243/#242 — both features are gated on 2025-06-18 sessions.
+            //   * resource_link: surface DCC artifact files without copying bytes
+            //   * structuredContent: hand back machine-readable payloads so the
+            //     agent skips the text→JSON re-parse step
+            let is_2025_06_18 = session_id
+                .and_then(|sid| state.sessions.get_protocol_version(sid))
+                .as_deref()
+                == Some("2025-06-18");
+
+            if is_2025_06_18 {
+                content.extend(crate::resource_link::extract_resource_links(&output));
             }
+
+            // #242 — ``structuredContent`` carries the dispatch output verbatim
+            // when it is a JSON object or array. Strings and nulls go through
+            // ``content[].text`` only, matching the 2025-03-26 convention.
+            // Older sessions never see the field (serde skips None).
+            let structured_content =
+                if is_2025_06_18 && matches!(&output, Value::Object(_) | Value::Array(_)) {
+                    Some(output.clone())
+                } else {
+                    None
+                };
 
             CallToolResult {
                 content,
+                structured_content,
                 is_error: false,
             }
         }
@@ -751,6 +789,7 @@ async fn handle_tools_call(
                 content: vec![protocol::ToolContent::Text {
                     text: envelope.to_json(),
                 }],
+                structured_content: None,
                 is_error: true,
             }
         }
@@ -763,210 +802,6 @@ async fn handle_tools_call(
             .is_some_and(|(_, recorded_at)| recorded_at.elapsed() < CANCELLED_REQUEST_TTL);
         if cancelled {
             tracing::info!(request_id = %rid, "Suppressing result — request was cancelled");
-            let envelope = DccMcpError::new(
-                "gateway",
-                "REQUEST_CANCELLED",
-                format!("Request {rid} was cancelled by the client."),
-            )
-            .with_hint("Re-send the request if you still need the result.");
-            return Ok(JsonRpcResponse::success(
-                req.id.clone(),
-                serde_json::to_value(CallToolResult::error(envelope.to_json()))?,
-            ));
-        }
-    }
-
-    Ok(JsonRpcResponse::success(
-        req.id.clone(),
-        serde_json::to_value(call_result)?,
-    ))
-}
-
-async fn handle_tools_call_with_params(
-    state: &AppState,
-    req: &JsonRpcRequest,
-    session_id: Option<&str>,
-    params: CallToolParams,
-) -> Result<JsonRpcResponse, HttpError> {
-    let tool_name = params.name.clone();
-    let (resolved_name, call_params) = resolve_action_for_call(state, &tool_name, &params);
-    if state.registry.get_action(&resolved_name, None).is_none() {
-        return Ok(JsonRpcResponse::success(
-            req.id.clone(),
-            serde_json::to_value(CallToolResult::error(
-                DccMcpError::new(
-                    "registry",
-                    "ACTION_NOT_FOUND",
-                    format!("Unknown tool: {tool_name}"),
-                )
-                .with_hint(
-                    "Use tools/list to see available tools, or load a skill first with load_skill."
-                        .to_string(),
-                )
-                .to_json(),
-            ))?,
-        ));
-    }
-
-    let req_id_str: Option<String> = req.id.as_ref().map(|id| match id {
-        Value::String(s) => s.clone(),
-        Value::Number(n) => n.to_string(),
-        other => serde_json::to_string(other).unwrap_or_default(),
-    });
-
-    let progress_token = params.meta.as_ref().and_then(|m| m.progress_token.clone());
-    let cancel_token = CancelToken::new();
-    let progress_reporter = ProgressReporter::new(
-        progress_token.clone(),
-        session_id.map(str::to_owned),
-        state.sessions.clone(),
-        req_id_str.clone().unwrap_or_default(),
-    );
-
-    if let Some(ref rid) = req_id_str {
-        let entry = InFlightEntry::new(cancel_token.clone(), progress_reporter.clone());
-        state.in_flight.insert(rid.clone(), entry);
-    }
-
-    if let Some(ref rid) = req_id_str {
-        let already_cancelled = state
-            .cancelled_requests
-            .get(rid)
-            .is_some_and(|ts| ts.elapsed() < CANCELLED_REQUEST_TTL);
-        if already_cancelled {
-            state.in_flight.remove(rid);
-            state.cancelled_requests.remove(rid);
-            let envelope = DccMcpError::new(
-                "registry",
-                "CANCELLED",
-                format!("Request {rid} was cancelled before dispatch."),
-            )
-            .with_hint("Re-send the request if you still need the result.");
-            return Ok(JsonRpcResponse::success(
-                req.id.clone(),
-                serde_json::to_value(CallToolResult::error(envelope.to_json()))?,
-            ));
-        }
-    }
-
-    let cancel_token_for_dispatch = cancel_token.clone();
-    let dispatch_outcome = if let Some(exec) = &state.executor {
-        let dispatcher = state.dispatcher.clone();
-        let name = resolved_name.clone();
-        let p = call_params.clone();
-        let ct = cancel_token_for_dispatch;
-        exec.execute(Box::new(move || {
-            if ct.is_cancelled() {
-                return serde_json::to_string(&json!({"__dispatch_error": "CANCELLED"}))
-                    .unwrap_or_default();
-            }
-            match dispatcher.dispatch(&name, p) {
-                Ok(r) => serde_json::to_string(&r.output).unwrap_or_else(|_| "null".to_string()),
-                Err(e) => serde_json::to_string(&json!({"__dispatch_error": e.to_string()}))
-                    .unwrap_or_default(),
-            }
-        }))
-        .await
-        .map(|json_str| {
-            let v: Value = serde_json::from_str(&json_str).unwrap_or(json!({}));
-            if let Some(err) = v.get("__dispatch_error") {
-                Err(err.as_str().unwrap_or("dispatch error").to_string())
-            } else {
-                Ok(v)
-            }
-        })
-        .unwrap_or_else(|e| Err(e.to_string()))
-    } else {
-        let dispatcher = state.dispatcher.clone();
-        let name = resolved_name.clone();
-        let p = call_params.clone();
-        let ct_for_block = cancel_token_for_dispatch.clone();
-        let dispatch_fut = tokio::task::spawn_blocking(move || {
-            if ct_for_block.is_cancelled() {
-                return Err("CANCELLED".to_string());
-            }
-            dispatcher
-                .dispatch(&name, p)
-                .map(|r| r.output)
-                .map_err(|e| e.to_string())
-        });
-        tokio::select! {
-            result = dispatch_fut => { result.map_err(|e| e.to_string()).and_then(|r| r) }
-            _ = async {
-                let deadline = tokio::time::Instant::now() + crate::inflight::CANCEL_GRACE_PERIOD;
-                loop {
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    if cancel_token_for_dispatch.is_cancelled() || tokio::time::Instant::now() >= deadline { break; }
-                }
-            } => { Err("CANCELLED".to_string()) }
-        }
-    };
-
-    if let Some(ref rid) = req_id_str {
-        state.in_flight.remove(rid);
-    }
-
-    let call_result = match dispatch_outcome {
-        Ok(output) => {
-            let text = match &output {
-                Value::String(s) => s.clone(),
-                Value::Null => String::new(),
-                other => serde_json::to_string_pretty(other).unwrap_or_else(|_| other.to_string()),
-            };
-            let mut content = vec![protocol::ToolContent::Text { text }];
-            if let Some(sid) = session_id {
-                let version = state.sessions.get_protocol_version(sid);
-                if version.as_deref() == Some("2025-06-18") {
-                    content.extend(crate::resource_link::extract_resource_links(&output));
-                }
-            }
-            CallToolResult {
-                content,
-                is_error: false,
-            }
-        }
-        Err(err_msg) if err_msg == "CANCELLED" => {
-            let rid = req_id_str.as_deref().unwrap_or("unknown");
-            if let Some(ref r) = req_id_str {
-                state.cancelled_requests.remove(r);
-            }
-            let envelope = DccMcpError::new(
-                "registry",
-                "CANCELLED",
-                format!("Request {rid} was cancelled by the client."),
-            )
-            .with_hint("Re-send the request if you still need the result.");
-            return Ok(JsonRpcResponse::success(
-                req.id.clone(),
-                serde_json::to_value(CallToolResult::error(envelope.to_json()))?,
-            ));
-        }
-        Err(err_msg) => {
-            let envelope = if err_msg.contains("no handler registered") {
-                DccMcpError::new(
-                    "instance",
-                    "NO_HANDLER",
-                    format!("Tool '{tool_name}' is registered but has no handler."),
-                )
-                .with_hint("Register a handler via ActionDispatcher.register_handler().")
-            } else {
-                DccMcpError::new("instance", "EXECUTION_FAILED", &err_msg)
-            };
-            CallToolResult {
-                content: vec![protocol::ToolContent::Text {
-                    text: envelope.to_json(),
-                }],
-                is_error: true,
-            }
-        }
-    };
-
-    if let Some(ref rid) = req_id_str {
-        let cancelled = state
-            .cancelled_requests
-            .remove(rid)
-            .is_some_and(|(_, recorded_at)| recorded_at.elapsed() < CANCELLED_REQUEST_TTL);
-        if cancelled {
             let envelope = DccMcpError::new(
                 "gateway",
                 "REQUEST_CANCELLED",
@@ -1276,20 +1111,10 @@ async fn handle_unload_skill(
 /// subsequent request, eliminating a handful of `String::from` / `json!` allocations
 /// per request.
 static CORE_TOOLS_CACHE: OnceLock<Vec<McpTool>> = OnceLock::new();
-static CORE_TOOLS_WITH_LAZY_CACHE: OnceLock<Vec<McpTool>> = OnceLock::new();
 
 /// Return the core discovery tools, building and caching them on the first call.
 fn build_core_tools() -> &'static [McpTool] {
     CORE_TOOLS_CACHE.get_or_init(build_core_tools_inner)
-}
-
-/// Return the core discovery tools plus lazy-action fast-path tools.
-fn build_core_tools_with_lazy_actions() -> &'static [McpTool] {
-    CORE_TOOLS_WITH_LAZY_CACHE.get_or_init(|| {
-        let mut tools = build_core_tools_inner();
-        tools.extend(build_lazy_action_core_tools());
-        tools
-    })
 }
 
 /// Inner builder — called exactly once per process lifetime.
@@ -1318,6 +1143,7 @@ fn build_core_tools_inner() -> Vec<McpTool> {
                     }
                 }
             }),
+            output_schema: None,
             annotations: Some(McpToolAnnotations {
                 title: Some("Find Skills".to_string()),
                 read_only_hint: Some(true),
@@ -1342,6 +1168,7 @@ fn build_core_tools_inner() -> Vec<McpTool> {
                     }
                 }
             }),
+            output_schema: None,
             annotations: Some(McpToolAnnotations {
                 title: Some("List Skills".to_string()),
                 read_only_hint: Some(true),
@@ -1365,6 +1192,7 @@ fn build_core_tools_inner() -> Vec<McpTool> {
                 },
                 "required": ["skill_name"]
             }),
+            output_schema: None,
             annotations: Some(McpToolAnnotations {
                 title: Some("Get Skill Info".to_string()),
                 read_only_hint: Some(true),
@@ -1393,6 +1221,7 @@ fn build_core_tools_inner() -> Vec<McpTool> {
                     }
                 }
             }),
+            output_schema: None,
             annotations: Some(McpToolAnnotations {
                 title: Some("Load Skill".to_string()),
                 read_only_hint: Some(false),
@@ -1416,6 +1245,7 @@ fn build_core_tools_inner() -> Vec<McpTool> {
                 },
                 "required": ["skill_name"]
             }),
+            output_schema: None,
             annotations: Some(McpToolAnnotations {
                 title: Some("Unload Skill".to_string()),
                 read_only_hint: Some(false),
@@ -1445,6 +1275,7 @@ fn build_core_tools_inner() -> Vec<McpTool> {
                 },
                 "required": ["query"]
             }),
+            output_schema: None,
             annotations: Some(McpToolAnnotations {
                 title: Some("Search Skills".to_string()),
                 read_only_hint: Some(true),
@@ -1470,6 +1301,7 @@ fn build_core_tools_inner() -> Vec<McpTool> {
                 },
                 "required": ["group"]
             }),
+            output_schema: None,
             annotations: Some(McpToolAnnotations {
                 title: Some("Activate Tool Group".to_string()),
                 read_only_hint: Some(false),
@@ -1494,6 +1326,7 @@ fn build_core_tools_inner() -> Vec<McpTool> {
                 },
                 "required": ["group"]
             }),
+            output_schema: None,
             annotations: Some(McpToolAnnotations {
                 title: Some("Deactivate Tool Group".to_string()),
                 read_only_hint: Some(false),
@@ -1527,6 +1360,7 @@ fn build_core_tools_inner() -> Vec<McpTool> {
                 },
                 "required": ["query"]
             }),
+            output_schema: None,
             annotations: Some(McpToolAnnotations {
                 title: Some("Search Tools".to_string()),
                 read_only_hint: Some(true),
@@ -1539,12 +1373,132 @@ fn build_core_tools_inner() -> Vec<McpTool> {
     ]
 }
 
+/// Build the three opt-in meta-tools for the lazy-actions fast-path (#254).
+///
+/// All three tool names are bare, lower-snake and ≤ 16 chars — SEP-986
+/// compliant and therefore legal to surface unprefixed in `tools/list`.
+/// They are only emitted when [`AppState::lazy_actions`] is `true`.
+fn build_lazy_action_tools() -> Vec<McpTool> {
+    vec![
+        McpTool {
+            name: "list_actions".to_string(),
+            description: "Return every enabled action as a compact \
+                          `{id, summary, tags}` record — no JSON schemas. \
+                          Pair with `describe_action` + `call_action` for a \
+                          token-minimal tool surface."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "dcc": {
+                        "type": "string",
+                        "description": "Optional DCC filter (e.g. \"maya\")"
+                    },
+                    "skill": {
+                        "type": "string",
+                        "description": "Optional skill-name filter"
+                    }
+                }
+            }),
+            output_schema: None,
+            annotations: Some(McpToolAnnotations {
+                title: Some("List Actions".to_string()),
+                read_only_hint: Some(true),
+                destructive_hint: Some(false),
+                idempotent_hint: Some(true),
+                open_world_hint: Some(false),
+                deferred_hint: Some(false),
+            }),
+        },
+        McpTool {
+            name: "describe_action".to_string(),
+            description: "Return the full JSON input schema for a single \
+                          action by id. Output matches what the action \
+                          would have contributed to `tools/list`."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Action id as reported by `list_actions`"
+                    }
+                },
+                "required": ["id"]
+            }),
+            output_schema: None,
+            annotations: Some(McpToolAnnotations {
+                title: Some("Describe Action".to_string()),
+                read_only_hint: Some(true),
+                destructive_hint: Some(false),
+                idempotent_hint: Some(true),
+                open_world_hint: Some(false),
+                deferred_hint: Some(false),
+            }),
+        },
+        McpTool {
+            name: "call_action".to_string(),
+            description: "Generic dispatcher: invoke an action by id with \
+                          the provided arguments. Semantically identical \
+                          to a direct `tools/call` against the action's \
+                          native tool name (single dispatch path, no \
+                          divergence)."
+                .to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Action id (e.g. `create_sphere` or \
+                                        `maya-geometry.create_sphere`)"
+                    },
+                    "args": {
+                        "type": "object",
+                        "description": "Arguments object, same shape as the \
+                                        action's input_schema"
+                    }
+                },
+                "required": ["id"]
+            }),
+            output_schema: None,
+            annotations: Some(McpToolAnnotations {
+                title: Some("Call Action".to_string()),
+                // `call_action` itself has no side effects beyond those of
+                // the underlying action — so we inherit nothing and signal
+                // the open-world hint so clients treat it defensively.
+                read_only_hint: Some(false),
+                destructive_hint: Some(false),
+                idempotent_hint: Some(false),
+                open_world_hint: Some(true),
+                deferred_hint: Some(false),
+            }),
+        },
+    ]
+}
+
 /// Convert an ActionMeta to an McpTool, respecting annotations from the skill.
-fn action_meta_to_mcp_tool(meta: &dcc_mcp_actions::registry::ActionMeta) -> McpTool {
+///
+/// `include_output_schema` controls whether the action's declared
+/// [`ActionMeta::output_schema`] is surfaced as the MCP `outputSchema` field
+/// (introduced in 2025-06-18). On older sessions this must be `false` so the
+/// field is never serialised.
+fn action_meta_to_mcp_tool(
+    meta: &dcc_mcp_actions::registry::ActionMeta,
+    include_output_schema: bool,
+) -> McpTool {
     let input_schema = if meta.input_schema.is_null() {
         json!({"type": "object"})
     } else {
         meta.input_schema.clone()
+    };
+
+    // Only surface a non-null schema. An explicit `null` from the action is
+    // equivalent to "unspecified" and must not leak as `outputSchema: null`
+    // (which some clients treat as a hard rejection).
+    let output_schema = if include_output_schema && !meta.output_schema.is_null() {
+        Some(meta.output_schema.clone())
+    } else {
+        None
     };
 
     let mcp_name = meta
@@ -1556,6 +1510,7 @@ fn action_meta_to_mcp_tool(meta: &dcc_mcp_actions::registry::ActionMeta) -> McpT
         name: mcp_name.clone(),
         description: meta.description.clone(),
         input_schema,
+        output_schema,
         annotations: Some(McpToolAnnotations {
             title: Some(mcp_name),
             // Actions from skills get sensible defaults; standalone actions default to false
@@ -1613,6 +1568,7 @@ fn build_skill_stub(summary: &SkillSummary) -> McpTool {
         name: format!("__skill__{}", summary.name),
         description,
         input_schema: json!({"type": "object", "properties": {}}),
+        output_schema: None,
         // Skill stubs are not callable tools: they exist solely to hint the agent
         // to call `load_skill` first. Full annotation blocks add ~40-60 tokens
         // per stub × 64 skills = measurable `tools/list` bloat with zero routing
@@ -1707,6 +1663,7 @@ fn build_group_stub(group: &str, tool_names: &[String]) -> McpTool {
         name: format!("__group__{group}"),
         description,
         input_schema: json!({"type": "object", "properties": {}}),
+        output_schema: None,
         // Same rationale as `build_skill_stub`: group stubs are not callable
         // tools, so their annotations are pure protocol noise. (#235)
         annotations: None,
@@ -1866,119 +1823,209 @@ async fn handle_search_tools(
     ))
 }
 
-/// Handle ``list_actions`` (lazy-action fast-path).
-///
-/// Returns compact metadata only: `{id, summary, tags}`.
-async fn handle_list_actions_fast(
-    state: &AppState,
-    req: &JsonRpcRequest,
-    _params: &CallToolParams,
-) -> Result<JsonRpcResponse, HttpError> {
-    let actions = state.registry.list_actions(None);
-    let list: Vec<Value> = actions
-        .iter()
-        .filter(|m| m.enabled)
-        .map(|m| {
-            json!({
-                "id": action_meta_to_mcp_tool(m).name,
-                "summary": m.description,
-                "tags": m.tags,
-            })
-        })
-        .collect();
+// ── Lazy-actions fast-path (#254) ─────────────────────────────────────────
 
-    let result = json!({
-        "total": list.len(),
-        "actions": list,
-    });
-    Ok(JsonRpcResponse::success(
-        req.id.clone(),
-        serde_json::to_value(CallToolResult::text(serde_json::to_string(&result)?))?,
-    ))
-}
-
-/// Handle ``describe_action`` (lazy-action fast-path).
+/// Handle ``list_actions`` — compact action catalog without JSON schemas.
 ///
-/// Returns the same schema body exposed by `tools/list` for a single action.
-async fn handle_describe_action_fast(
+/// Returns one JSON object per enabled action, containing **only** the
+/// three fields needed for an agent to decide whether to follow up with
+/// ``describe_action`` / ``call_action``:
+///
+/// ```text
+/// {"id": <full tool name>, "summary": <description>, "tags": [...]}
+/// ```
+///
+/// Deliberately omits the input/output schemas — surfacing them here
+/// would defeat the whole point of the fast-path (1/10 token target).
+async fn handle_list_actions(
     state: &AppState,
     req: &JsonRpcRequest,
     params: &CallToolParams,
 ) -> Result<JsonRpcResponse, HttpError> {
-    let action_id = params
+    let args = params.arguments.as_ref();
+    let dcc = args.and_then(|a| a.get("dcc")).and_then(Value::as_str);
+    let skill_filter = args.and_then(|a| a.get("skill")).and_then(Value::as_str);
+
+    let mut items: Vec<Value> = Vec::new();
+    for meta in state.registry.list_actions(dcc) {
+        if !meta.enabled {
+            continue;
+        }
+        if let Some(want) = skill_filter
+            && meta.skill_name.as_deref() != Some(want)
+        {
+            continue;
+        }
+        // Action id is the canonical tool name — matches what `tools/list`
+        // would have emitted, so `call_action(id=...)` is interchangeable
+        // with a direct `tools/call { name: id }`.
+        let id = meta
+            .skill_name
+            .as_deref()
+            .and_then(|sn| skill_tool_name(sn, &meta.name))
+            .unwrap_or_else(|| meta.name.clone());
+        items.push(json!({
+            "id": id,
+            "summary": meta.description,
+            "tags": meta.tags,
+        }));
+    }
+
+    let payload = json!({
+        "total": items.len(),
+        "actions": items,
+    });
+    Ok(JsonRpcResponse::success(
+        req.id.clone(),
+        serde_json::to_value(CallToolResult::text(serde_json::to_string(&payload)?))?,
+    ))
+}
+
+/// Handle ``describe_action`` — full JSON schema for a single action.
+async fn handle_describe_action(
+    state: &AppState,
+    req: &JsonRpcRequest,
+    params: &CallToolParams,
+    session_id: Option<&str>,
+) -> Result<JsonRpcResponse, HttpError> {
+    let id = match params
         .arguments
         .as_ref()
         .and_then(|a| a.get("id"))
         .and_then(Value::as_str)
-        .unwrap_or_default();
-    if action_id.is_empty() {
-        return Ok(JsonRpcResponse::success(
-            req.id.clone(),
-            serde_json::to_value(CallToolResult::error("Missing required parameter: id"))?,
-        ));
-    }
+    {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => {
+            return Ok(JsonRpcResponse::success(
+                req.id.clone(),
+                serde_json::to_value(CallToolResult::error("Missing required parameter: id"))?,
+            ));
+        }
+    };
 
-    let resolved = resolve_tool_name(state, action_id);
-    let Some(meta) = state.registry.get_action(&resolved, None) else {
+    // Accept both the canonical skill-prefixed id (what `list_actions`
+    // returns) and the bare registry name, so the agent can round-trip
+    // through either `tools/list` or the fast-path.
+    let meta = resolve_action_by_id(&state.registry, &id);
+
+    let Some(meta) = meta else {
         let envelope = DccMcpError::new(
             "registry",
             "ACTION_NOT_FOUND",
-            format!("Unknown action id: {action_id}"),
+            format!("Unknown action id: {id}"),
         )
-        .with_hint("Use list_actions to enumerate callable ids.");
+        .with_hint("Call list_actions to see available ids.");
         return Ok(JsonRpcResponse::success(
             req.id.clone(),
             serde_json::to_value(CallToolResult::error(envelope.to_json()))?,
         ));
     };
-    let tool = action_meta_to_mcp_tool(&meta);
+
+    // Mirror the exact shape `tools/list` would have produced for this
+    // action so agents can reuse a single parser.
+    let include_output_schema = session_id
+        .and_then(|sid| state.sessions.get_protocol_version(sid))
+        .as_deref()
+        == Some("2025-06-18");
+    let tool = action_meta_to_mcp_tool(&meta, include_output_schema);
+    let payload = serde_json::to_value(tool)?;
+
     Ok(JsonRpcResponse::success(
         req.id.clone(),
-        serde_json::to_value(CallToolResult::text(serde_json::to_string(&tool)?))?,
+        serde_json::to_value(CallToolResult::text(serde_json::to_string(&payload)?))?,
     ))
 }
 
-/// Handle ``call_action`` (lazy-action fast-path).
+/// Handle ``call_action`` — generic dispatcher that delegates to the same
+/// tool-call path as a direct `tools/call`.
 ///
-/// Delegates through the same `tools/call` path by transforming into a virtual
-/// `CallToolParams` and then reusing the canonical dispatch flow.
-async fn handle_call_action_fast(
+/// Implementation strategy: rewrite the incoming request's ``params``
+/// into a standard ``CallToolParams { name: id, arguments: args }`` shape
+/// and recurse into [`handle_tools_call`]. Because the recursion target
+/// rejects ``list_actions`` / ``describe_action`` / ``call_action`` names
+/// (the dispatch branch only matches when `state.lazy_actions` is true
+/// **and** the name is one of the three), we guard against infinite
+/// recursion by rejecting those three names explicitly.
+async fn handle_call_action(
     state: &AppState,
     req: &JsonRpcRequest,
-    session_id: Option<&str>,
     params: &CallToolParams,
+    session_id: Option<&str>,
 ) -> Result<JsonRpcResponse, HttpError> {
-    let action_id = params
-        .arguments
-        .as_ref()
-        .and_then(|a| a.get("id"))
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    if action_id.is_empty() {
+    let args = params.arguments.as_ref();
+    let id = match args.and_then(|a| a.get("id")).and_then(Value::as_str) {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => {
+            return Ok(JsonRpcResponse::success(
+                req.id.clone(),
+                serde_json::to_value(CallToolResult::error("Missing required parameter: id"))?,
+            ));
+        }
+    };
+
+    // Guard: refuse to call the fast-path meta-tools through themselves.
+    // This also makes their discoverability less surprising — the agent
+    // cannot recurse into `call_action(id="call_action")`.
+    if matches!(
+        id.as_str(),
+        "list_actions" | "describe_action" | "call_action"
+    ) {
+        let envelope = DccMcpError::new(
+            "registry",
+            "RECURSIVE_META_CALL",
+            format!("`call_action` refuses to dispatch meta-tool `{id}`."),
+        )
+        .with_hint("Call the meta-tool directly via tools/call instead.");
         return Ok(JsonRpcResponse::success(
             req.id.clone(),
-            serde_json::to_value(CallToolResult::error("Missing required parameter: id"))?,
-        ));
-    }
-    let args = params
-        .arguments
-        .as_ref()
-        .and_then(|a| a.get("args"))
-        .cloned()
-        .unwrap_or_else(|| json!({}));
-    if !args.is_object() {
-        return Ok(JsonRpcResponse::success(
-            req.id.clone(),
-            serde_json::to_value(CallToolResult::error("Parameter args must be an object"))?,
+            serde_json::to_value(CallToolResult::error(envelope.to_json()))?,
         ));
     }
 
-    let bridged = CallToolParams {
-        name: action_id.to_string(),
-        arguments: Some(args),
-        meta: Some(CallToolMeta::default()),
+    let inner_args = args.and_then(|a| a.get("args")).cloned();
+
+    // Build a synthetic request that looks identical to a direct
+    // `tools/call` on the target action. Preserving the original
+    // JSON-RPC id/meta keeps progress/cancellation tokens working.
+    let inner_params = CallToolParams {
+        name: id,
+        arguments: inner_args,
+        meta: params.meta.clone(),
     };
-    handle_tools_call_with_params(state, req, session_id, bridged).await
+    let inner_req = JsonRpcRequest {
+        jsonrpc: req.jsonrpc.clone(),
+        id: req.id.clone(),
+        method: "tools/call".to_string(),
+        params: Some(serde_json::to_value(&inner_params)?),
+    };
+
+    // `Box::pin` is required because this async fn would otherwise form a
+    // recursion cycle with `handle_tools_call` (which routes back into us
+    // on the `call_action` branch). The meta-tool guard above guarantees
+    // the recursion terminates in one step — we only ever call through
+    // to a real action.
+    Box::pin(handle_tools_call(state, &inner_req, session_id)).await
+}
+
+/// Look up an action by the id surfaced in `list_actions` (canonical
+/// `<skill>.<tool>` form or bare registry name), returning a cloned
+/// [`ActionMeta`] for downstream inspection.
+fn resolve_action_by_id(
+    registry: &dcc_mcp_actions::registry::ActionRegistry,
+    id: &str,
+) -> Option<dcc_mcp_actions::registry::ActionMeta> {
+    // Fast path: direct registry hit (happens for bare action names).
+    if let Some(m) = registry.get_action(id, None) {
+        return Some(m);
+    }
+    // Canonical `<skill>.<tool>` form — decode and match by skill.
+    if let Some((skill_part, bare_tool)) = decode_skill_tool_name(id) {
+        return registry
+            .list_actions_by_skill(skill_part)
+            .into_iter()
+            .find(|m| extract_bare_tool_name(skill_part, &m.name) == bare_tool);
+    }
+    None
 }
 
 /// Send a `notifications/tools/list_changed` event to a session's SSE subscribers.
@@ -2020,104 +2067,6 @@ fn notify_tools_changed(
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-
-fn resolve_tool_name(state: &AppState, tool_name: &str) -> String {
-    if state.registry.get_action(tool_name, None).is_some() {
-        return tool_name.to_string();
-    }
-    if let Some((skill_part, bare_tool)) = decode_skill_tool_name(tool_name) {
-        if let Some(m) = state
-            .registry
-            .list_actions_by_skill(skill_part)
-            .into_iter()
-            .find(|m| extract_bare_tool_name(skill_part, &m.name) == bare_tool)
-        {
-            return m.name;
-        }
-        return tool_name.to_string();
-    }
-
-    let lm = state.registry.list_actions(None).into_iter().find(|m| {
-        m.skill_name
-            .as_deref()
-            .map(|sn| extract_bare_tool_name(sn, &m.name) == tool_name)
-            .unwrap_or(false)
-    });
-    if let Some(ref matched) = lm {
-        let canonical = skill_tool_name(matched.skill_name.as_deref().unwrap_or(""), &matched.name)
-            .unwrap_or_else(|| matched.name.clone());
-        tracing::warn!(bare_name=%tool_name, "Deprecated bare name -- use {canonical}.");
-        matched.name.clone()
-    } else {
-        tool_name.to_string()
-    }
-}
-
-fn resolve_action_for_call(
-    state: &AppState,
-    tool_name: &str,
-    params: &CallToolParams,
-) -> (String, Value) {
-    let resolved_name = resolve_tool_name(state, tool_name);
-    let call_params = params.arguments.clone().unwrap_or(json!({}));
-    (resolved_name, call_params)
-}
-
-fn build_lazy_action_core_tools() -> Vec<McpTool> {
-    vec![
-        McpTool {
-            name: "list_actions".to_string(),
-            description: "List loaded callable actions as compact entries: id, summary, tags."
-                .to_string(),
-            input_schema: json!({"type":"object","properties":{}}),
-            annotations: Some(McpToolAnnotations {
-                title: Some("List Actions".to_string()),
-                read_only_hint: Some(true),
-                destructive_hint: Some(false),
-                idempotent_hint: Some(true),
-                open_world_hint: Some(false),
-                deferred_hint: Some(false),
-            }),
-        },
-        McpTool {
-            name: "describe_action".to_string(),
-            description: "Get the full schema/metadata for one action id.".to_string(),
-            input_schema: json!({
-                "type":"object",
-                "properties":{"id":{"type":"string","description":"Action id from list_actions"}},
-                "required":["id"]
-            }),
-            annotations: Some(McpToolAnnotations {
-                title: Some("Describe Action".to_string()),
-                read_only_hint: Some(true),
-                destructive_hint: Some(false),
-                idempotent_hint: Some(true),
-                open_world_hint: Some(false),
-                deferred_hint: Some(false),
-            }),
-        },
-        McpTool {
-            name: "call_action".to_string(),
-            description: "Call an action by id using generic args object.".to_string(),
-            input_schema: json!({
-                "type":"object",
-                "properties":{
-                    "id":{"type":"string","description":"Action id from list_actions"},
-                    "args":{"type":"object","description":"Arguments object for the action","default":{}}
-                },
-                "required":["id"]
-            }),
-            annotations: Some(McpToolAnnotations {
-                title: Some("Call Action".to_string()),
-                read_only_hint: Some(false),
-                destructive_hint: Some(false),
-                idempotent_hint: Some(false),
-                open_world_hint: Some(false),
-                deferred_hint: Some(false),
-            }),
-        },
-    ]
-}
 
 fn parse_raw_values(body: &str) -> Result<Vec<Value>, serde_json::Error> {
     if body.trim_start().starts_with('[') {
