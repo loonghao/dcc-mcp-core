@@ -60,6 +60,7 @@ export default defineConfig({
               text: 'Advanced',
               items: [
                 { text: 'Architecture', link: '/guide/architecture' },
+                { text: 'DCC-Link RFC Status', link: '/guide/dcc-link-rfc-status' },
                 { text: 'Custom Skills', link: '/guide/custom-actions' },
                 { text: 'Process Management', link: '/guide/process' },
                 { text: 'Sandbox & Security', link: '/guide/sandbox' },
@@ -143,6 +144,7 @@ export default defineConfig({
               text: '进阶',
               items: [
                 { text: '架构设计', link: '/zh/guide/architecture' },
+                { text: 'DCC-Link RFC 状态', link: '/zh/guide/dcc-link-rfc-status' },
                 { text: '自定义 Skill', link: '/zh/guide/custom-actions' },
                 { text: '进程管理', link: '/zh/guide/process' },
                 { text: '沙箱与安全', link: '/zh/guide/sandbox' },

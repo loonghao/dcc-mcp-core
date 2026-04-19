@@ -1,55 +1,50 @@
-# DCC-Link RFC 状态（Issue #249）
+# DCC-Link RFC 状态
 
-> 对应 GitHub issue：[#249](https://github.com/loonghao/dcc-mcp-core/issues/249)
->
-> 本页面用于沉淀 RFC 的当前状态，区分：
-> - 已并入主线的能力
-> - 仍待实现的核心子任务
-> - 上游 `ipckit` 依赖项
+本文档沉淀了 DCC-Link RFC 的当前状态，帮助维护者快速判断哪些能力已经落地、哪些仍待实现，以及后续实施边界。
 
-## RFC 目标（摘要）
+## RFC 决策摘要
 
-RFC #249 目标是在 DCC 生态中统一采用 `ipckit` 作为传输/任务基座，以支持：
+- 采用 **ipckit** 作为 DCC-Link 的传输与任务基础设施（LocalSocket / TaskManager / EventStream / SharedMemory）。
+- 保持 dcc-mcp-core 的核心约束：
+  - 主机侧零第三方 Python 运行时依赖（仅本项目 wheel）。
+  - 线程亲和（Main / Named / Any）与主线程安全优先。
+  - 长任务一等公民（进度、取消、可观测性）。
 
-- 长任务（进度 + 取消）
-- 线程亲和（`Main` / `Named` / `Any`）
-- 主线程安全调度
-- 低上下文成本的工具发现
-
-## 已并入主线（截至当前分支）
+## 已并入主线
 
 以下能力已在相邻 issue/PR 中落地：
 
-- Progress/Cancel 通知桥接
-- `tools/list` 分页 + 增量通知
-- 资源链接（ResourceLink）输出
-- SEP-986 命名约束与网关分隔符修复
+- HTTP 进度通知与协作取消（`notifications/progress` / `notifications/cancelled`）。
+- `tools/list` 分页 + 增量更新通知（delta）。
+- 主动 skill/tool namespacing。
+- DCC 产物的 ResourceLink 内容输出。
+- 网关工具名分隔符修复为 `.`，满足 SEP-986。
+- 初始 ipckit 传输迁移切片。
+- 初始 `ThreadAffinity` / `HostDispatcher` 原语。
 
-说明：RFC 原始 checklist 中与上述能力重叠的项可按“已覆盖（superseded）”处理。
+说明：RFC 原始 checklist 中与上述能力重叠的项可按"已覆盖"处理。
 
 ## 仍需推进的核心子任务
 
-RFC #249 在当前仓库内仍主要跟踪这些实现项：
-
-1. **Transport 适配层收敛**
-   - 将本地 IPC 路径稳定切换到 `ipckit` 基础设施
-   - 保持现有 `TransportAddress` / `IpcListener` / `FramedChannel` API 兼容
-
-2. **ThreadAffinity + HostDispatcher**
-   - 引入/完善 `ThreadAffinity` 调度契约
-   - 提供 `StandaloneDispatcher` 参考实现
-   - 为各 DCC host crate 后续接入保留稳定 trait 边界
-
-3. **主线程 Pump（后续）**
-   - 时间片预算 + 协作式让出执行权
-   - 避免 DCC UI 线程卡死
+1. **ipckit 传输基座持续收敛**
+   - 已有最小接入（见 #251），继续收敛为稳定默认路径。
+2. **线程亲和与主线程调度体系**
+   - `ThreadAffinity` / `HostDispatcher` 已引入（见 #252）。
+   - 仍需主线程时间片 pump（含协作让出）闭环。
+3. **lazy actions fast-path**
+   - 与分页策略协同，评估是否需要三段式 discover/describe/call 模式。
 
 ## 与子 issue 的映射
 
-- #251: `dcc-mcp-transport` 适配层切片
-- #252: `dcc-mcp-process` 线程亲和调度切片
-- #253: 主线程 pump（时间片）
+- #251: transport 适配层切片（ipckit 接入）
+- #252: ThreadAffinity / HostDispatcher
+- #253: 主线程 pump + 时间片预算
+- #254: lazy actions fast-path（与分页策略协同）
+- #255: EventStream ↔ MCP 通知桥接（核心能力已被后续实现覆盖）
 
-## 上游依赖（ipckit）
+## 实施建议（给后续 PR）
 
-本 RFC 的完整闭环仍依赖上游能力演进（例如 ThreadAffinity 与 TaskManager 深度集成）。在上游稳定前，仓库内采用分层适配策略，先保证 API 与行为可持续演进。
+- 每个 PR 保持"最小可合并切片"，优先可验证的行为变更。
+- 文档中引用 RFC 时，始终附加"Reality Check"语境，避免复述过时目标。
+- 若能力已在相邻 issue 完成，优先做"对齐与收敛"而非重复实现。
+- 新工作应同时链接本 RFC umbrella 和具体的子 issue。
