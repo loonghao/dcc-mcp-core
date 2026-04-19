@@ -18,7 +18,7 @@ use pyo3::types::PyDict;
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Runtime;
 
-use crate::dispatcher::{JobRequest, StandaloneDispatcher, ThreadAffinity};
+use crate::dispatcher::{HostDispatcher, JobRequest, StandaloneDispatcher, ThreadAffinity};
 use crate::error::ProcessError;
 use crate::launcher::DccLauncher;
 use crate::monitor::ProcessMonitor;
@@ -709,7 +709,9 @@ impl PyStandaloneDispatcher {
                         "named affinity requires non-empty thread name",
                     ));
                 }
-                ThreadAffinity::named(raw)?
+                // Named affinity labels are runtime-defined; leak the parsed label
+                // into a `'static` string for this process lifetime.
+                ThreadAffinity::Named(Box::leak(raw.to_string().into_boxed_str()))
             }
             _ => {
                 return Err(PyValueError::new_err(
@@ -718,7 +720,21 @@ impl PyStandaloneDispatcher {
             }
         };
 
-        let req = JobRequest::new(action_name, affinity).with_payload(payload.unwrap_or_default());
+        let request_id = action_name.to_string();
+        let action_name = action_name.to_string();
+        let payload = payload.unwrap_or_default();
+        let task_action_name = action_name.clone();
+        let task_payload = payload.clone();
+        let req = JobRequest::new(
+            request_id,
+            affinity,
+            Box::new(move || {
+                Ok(serde_json::json!({
+                    "action_name": task_action_name,
+                    "payload": task_payload,
+                }))
+            }),
+        );
         let rt = runtime()?;
         let outcome = rt
             .block_on(async {
@@ -728,11 +744,17 @@ impl PyStandaloneDispatcher {
             .map_err(map_process_err)?;
 
         let d = PyDict::new(py);
+        let output_json = outcome
+            .output
+            .map(|v| serde_json::to_string(&v))
+            .transpose()
+            .map_err(|e| {
+                PyRuntimeError::new_err(format!("failed to encode output as JSON: {e}"))
+            })?;
         d.set_item("request_id", outcome.request_id)?;
-        d.set_item("action_name", outcome.action_name)?;
         d.set_item("affinity", outcome.affinity.to_string())?;
-        d.set_item("ok", outcome.ok)?;
-        d.set_item("output", outcome.output)?;
+        d.set_item("success", outcome.success)?;
+        d.set_item("output", output_json)?;
         d.set_item("error", outcome.error)?;
         Ok(d)
     }
@@ -752,8 +774,8 @@ impl PyStandaloneDispatcher {
         let d = PyDict::new(py);
         d.set_item("supports_main_thread", caps.supports_main_thread)?;
         d.set_item("supports_named_threads", caps.supports_named_threads)?;
-        d.set_item("supports_cancellation", caps.supports_cancellation)?;
-        d.set_item("supports_progress", caps.supports_progress)?;
+        d.set_item("supports_any_thread", caps.supports_any_thread)?;
+        d.set_item("supports_time_slicing", caps.supports_time_slicing)?;
         Ok(d)
     }
 }
