@@ -53,6 +53,7 @@ export default defineConfig({
                 { text: 'MCP Protocols', link: '/guide/protocols' },
                 { text: 'Naming Actions & Tools', link: '/guide/naming' },
                 { text: 'Transport Layer', link: '/guide/transport' },
+                { text: 'DCC-Link RFC Status (Issue #249)', link: '/guide/dcc-link-rfc-status' },
               ]
             },
             {
@@ -135,6 +136,7 @@ export default defineConfig({
                 { text: '事件系统', link: '/zh/guide/events' },
                 { text: 'MCP 协议', link: '/zh/guide/protocols' },
                 { text: '传输层', link: '/zh/guide/transport' },
+                { text: 'DCC-Link RFC 状态（Issue #249）', link: '/zh/guide/dcc-link-rfc-status' },
               ]
             },
             {
