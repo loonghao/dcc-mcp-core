@@ -21,18 +21,13 @@ use uuid::Uuid;
 const SESSION_LOG_BUFFER_CAP: usize = 200;
 
 /// Session-scoped MCP logging threshold.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SessionLogLevel {
     Debug,
+    #[default]
     Info,
     Warning,
     Error,
-}
-
-impl Default for SessionLogLevel {
-    fn default() -> Self {
-        Self::Info
-    }
 }
 
 impl SessionLogLevel {
