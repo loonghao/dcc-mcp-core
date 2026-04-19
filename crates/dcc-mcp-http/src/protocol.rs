@@ -36,6 +36,9 @@ pub const DELTA_TOOLS_UPDATE_CAP: &str = "dcc_mcp_core/deltaToolsUpdate";
 /// Method name for vendored delta tools update notifications.
 pub const DELTA_TOOLS_METHOD: &str = "notifications/tools/delta";
 
+/// MCP method name for per-session logging threshold updates.
+pub const LOGGING_SET_LEVEL_METHOD: &str = "logging/setLevel";
+
 /// Number of tools returned per `tools/list` page.
 pub const TOOLS_LIST_PAGE_SIZE: usize = 32;
 
@@ -175,6 +178,10 @@ pub struct ServerCapabilities {
     pub resources: Option<ResourcesCapability>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompts: Option<PromptsCapability>,
+    /// Server supports client-driven log threshold control via
+    /// `logging/setLevel` and emits `notifications/message`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logging: Option<LoggingCapability>,
     /// Vendor-extension capabilities echoed back to the client.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub experimental: Option<Value>,
@@ -197,6 +204,14 @@ pub struct ResourcesCapability {
 #[serde(rename_all = "camelCase")]
 pub struct PromptsCapability {
     pub list_changed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LoggingCapability {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoggingSetLevelParams {
+    pub level: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
