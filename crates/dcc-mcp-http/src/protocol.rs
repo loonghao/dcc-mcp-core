@@ -39,6 +39,9 @@ pub const DELTA_TOOLS_METHOD: &str = "notifications/tools/delta";
 /// MCP method name for per-session logging threshold updates.
 pub const LOGGING_SET_LEVEL_METHOD: &str = "logging/setLevel";
 
+/// Method name for server-initiated user elicitation.
+pub const ELICITATION_CREATE_METHOD: &str = "elicitation/create";
+
 /// Number of tools returned per `tools/list` page.
 pub const TOOLS_LIST_PAGE_SIZE: usize = 32;
 
@@ -182,6 +185,12 @@ pub struct ServerCapabilities {
     /// `logging/setLevel` and emits `notifications/message`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub logging: Option<LoggingCapability>,
+
+    /// Client-side elicitation support (MCP 2025-06-18).
+    ///
+    /// The server includes this field only on 2025-06-18 sessions.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub elicitation: Option<ElicitationCapability>,
     /// Vendor-extension capabilities echoed back to the client.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub experimental: Option<Value>,
@@ -212,6 +221,26 @@ pub struct LoggingCapability {}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoggingSetLevelParams {
     pub level: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ElicitationCapability {}
+
+/// Request params for `elicitation/create`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ElicitationCreateParams {
+    pub message: String,
+    pub requested_schema: Value,
+}
+
+/// Result payload returned by client for `elicitation/create`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ElicitationCreateResult {
+    pub action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
