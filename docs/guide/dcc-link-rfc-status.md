@@ -1,4 +1,4 @@
-# DCC-Link RFC status (issue #250)
+# DCC-Link RFC status
 
 This page tracks the current implementation status of the DCC-Link RFC and
 documents what remains in `dcc-mcp-core`.
@@ -15,18 +15,24 @@ Design goals from the RFC:
 - keep DCC API execution main-thread safe via explicit thread-affinity contracts
 - reduce MCP client context pressure with lazy/progressive discovery patterns
 
-## Current status snapshot
+## What is already shipped
 
-Several RFC-adjacent items are already merged:
+The following RFC-adjacent work has landed in this repository:
 
-- progress/cancellation notifications over MCP HTTP are implemented
-- paginated `tools/list` and delta updates are implemented
-- SEP-986 name validation and gateway separator compatibility fixes are implemented
+- HTTP progress and cooperative cancellation flow
+- `tools/list` pagination + delta notification path
+- proactive tool namespacing and SEP-986 validator support
+- ResourceLink content for DCC artifact handoff
+- initial transport migration slices for ipckit-backed local IPC
+- initial `ThreadAffinity` / `HostDispatcher` primitives in process layer
 
-Recent transport migration slice (issue #251):
+## Active tracking (core)
 
-- local IPC path in `dcc-mcp-transport` now routes through ipckit async local sockets
-- public transport API remains stable (`TransportAddress`, `IpcListener`, `connect_ipc`)
+- #251 — transport migration slices to ipckit-backed local IPC
+- #252 — thread-affinity dispatcher contract and reference implementation
+- #253 — main-thread pump with time-slice budget and cooperative yield points
+- #254 — lazy action schema fast path (discover/describe/call direction)
+- #255 — EventStream bridge alignment for MCP progress/cancelled notifications
 
 ## What remains in core scope
 
@@ -36,16 +42,9 @@ The high-priority remaining technical work in the RFC chain is:
 2. add main-thread pump scheduling with bounded time-slice budget
 3. decide whether any extra lazy schema surface is still needed beyond pagination + deltas
 
-## Mapping to tracking issues
-
-- #251: transport migration slice to ipckit local IPC
-- #252: thread-affinity dispatcher primitives
-- #253: main-thread pump and cooperative scheduling
-- #254: lazy action exposure strategy
-- #255: progress/cancel bridge (already covered by merged HTTP work)
-
 ## Guidance for contributors
 
-- treat this RFC as an architecture tracking umbrella
+- treat this RFC as a **tracking umbrella** rather than a single merge item
 - prefer small, mergeable slices per issue with tests
 - keep public API compatibility unless an explicit breaking-change path is approved
+- new work should link both this umbrella and the concrete child issue
