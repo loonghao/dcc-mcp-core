@@ -3682,9 +3682,9 @@ class InputValidator:
 # ── Shared Memory (dcc-mcp-shm) ──
 
 class PySharedBuffer:
-    """A named, fixed-capacity shared memory buffer backed by a memory-mapped file.
+    """A named, fixed-capacity shared memory buffer backed by an ipckit shared memory segment.
 
-    Zero-copy: the DCC side writes data directly into the mapped region; the
+    Zero-copy: the DCC side writes data directly into the shared region; the
     consumer reads from the same mapping without any copying or serialisation.
 
     Example::
@@ -3697,7 +3697,7 @@ class PySharedBuffer:
         # Cross-process handoff
         desc_json = buf.descriptor_json()
         # ... send desc_json to consumer via IPC ...
-        buf2 = PySharedBuffer.open(path=buf.path(), id=buf.id)
+        buf2 = PySharedBuffer.open(name=buf.name(), id=buf.id)
         assert buf2.read() == b"vertex data"
 
     """
@@ -3707,8 +3707,8 @@ class PySharedBuffer:
         """Create a new buffer with the given capacity in bytes."""
         ...
     @staticmethod
-    def open(path: str, id: str) -> PySharedBuffer:
-        """Open an existing buffer from a file path and id."""
+    def open(name: str, id: str) -> PySharedBuffer:
+        """Open an existing buffer from an ipckit segment name and id."""
         ...
     def write(self, data: bytes) -> int:
         """Write bytes into the buffer. Returns the number of bytes written.
@@ -3734,8 +3734,8 @@ class PySharedBuffer:
     def id(self) -> str:
         """Buffer id (string)."""
         ...
-    def path(self) -> str:
-        """File path of the backing memory-mapped file."""
+    def name(self) -> str:
+        """Ipckit segment name of the backing shared memory."""
         ...
     def descriptor_json(self) -> str:
         """Return a JSON descriptor string for cross-process handoff."""

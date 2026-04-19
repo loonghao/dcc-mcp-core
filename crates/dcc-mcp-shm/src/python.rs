@@ -52,10 +52,10 @@ impl PySharedBuffer {
             .map_err(to_py)
     }
 
-    /// Open an existing buffer from a file path and id.
+    /// Open an existing buffer from an ipckit segment name and id.
     #[staticmethod]
-    fn open(path: &str, id: &str) -> PyResult<Self> {
-        SharedBuffer::open(path, id)
+    fn open(name: &str, id: &str) -> PyResult<Self> {
+        SharedBuffer::open(name, id)
             .map(|inner| Self {
                 inner,
                 _pool_guard: None,
@@ -94,14 +94,14 @@ impl PySharedBuffer {
         &self.inner.id
     }
 
-    /// File path of the backing memory-mapped file.
-    fn path(&self) -> String {
-        self.inner.path().to_string_lossy().into_owned()
+    /// ipckit segment name of the backing shared memory.
+    fn name(&self) -> String {
+        self.inner.name()
     }
 
     /// Return a JSON descriptor string for cross-process handoff.
     fn descriptor_json(&self) -> PyResult<String> {
-        BufferDescriptor::from_buffer(&self.inner)
+        BufferDescriptor::from_buffer(&self.inner)?
             .to_json()
             .map_err(to_py)
     }
