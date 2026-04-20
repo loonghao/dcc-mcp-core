@@ -489,7 +489,7 @@ fn prune_old(directory: &Path, prefix: &str, max_files: usize) {
     }
 
     // Sort newest → oldest; drop the tail beyond `max_files`.
-    rolled.sort_by(|a, b| b.0.cmp(&a.0));
+    rolled.sort_by_key(|entry| std::cmp::Reverse(entry.0));
     for (_, path) in rolled.into_iter().skip(max_files) {
         let _ = std::fs::remove_file(path);
     }
