@@ -486,7 +486,9 @@ class TestMcporterProgressiveLoading:
         # tools/list should now include the skill's tool
         tools = _mcporter_list_tools(url, name)
         tool_names = {t["name"] if isinstance(t, dict) else t for t in tools}
-        assert any("hello" in n.lower() for n in tool_names), f"hello-world tool not in list: {tool_names}"
+        assert "greet" in tool_names or any("hello" in n.lower() for n in tool_names), (
+            f"hello-world tool (bare: greet) not in list: {tool_names}"
+        )
 
     def test_call_skill_tool_after_load(self, server_with_catalog):
         """Invoke a skill-backed tool after loading it."""
@@ -816,7 +818,9 @@ class TestMultipleServerInstances:
             names_a = self._tools_list(h_a.mcp_url())
             names_b = self._tools_list(h_b.mcp_url())
 
-            assert any("hello" in n.lower() for n in names_a), f"hello-world missing from A: {names_a}"
+            assert "greet" in names_a or any("hello" in n.lower() for n in names_a), (
+                f"hello-world missing from A: {names_a}"
+            )
             assert "greet" not in names_b, f"hello-world leaked into B: {names_b}"
         finally:
             h_a.shutdown()
@@ -972,7 +976,9 @@ class TestProgressiveLoadingBoundary:
 
         tools = _mcporter_list_tools(url, name)
         names = {t["name"] if isinstance(t, dict) else t for t in tools}
-        assert any("hello" in n for n in names), f"Expected hello-world tool after reload, got: {names}"
+        assert "greet" in names or any("hello" in n for n in names), (
+            f"Expected hello-world tool (bare: greet) after reload, got: {names}"
+        )
 
 
 @pytest.mark.skipif(not NPX_AVAILABLE, reason="npx / mcporter not available")
