@@ -92,6 +92,13 @@ pub struct AppState {
     /// field so downstream changes can attach to it without touching
     /// `AppState` again.
     pub jobs: Arc<crate::job::JobManager>,
+    /// Job / workflow lifecycle notifier (#326).
+    ///
+    /// Bridges `JobManager` transitions onto SSE. Also exposes
+    /// [`JobNotifier::emit_workflow_update`](crate::notifications::JobNotifier::emit_workflow_update)
+    /// for the #348 workflow executor to call when workflow-level
+    /// transitions occur.
+    pub job_notifier: crate::notifications::JobNotifier,
     /// MCP Resources primitive registry (issue #350).
     ///
     /// Populated regardless of `enable_resources` so producers can be
@@ -1176,6 +1183,27 @@ async fn handle_tools_call_inner(
         req_id_str.clone().unwrap_or_default(),
     );
 
+    // ── Job lifecycle tracking (#316 + #326) ─────────────────────────────
+    // Create a Pending→Running→terminal job whenever either (a) the caller
+    // supplied a `progressToken` (channel A will fire) or (b) the session
+    // opted into `$/dcc.jobUpdated` via `enable_job_notifications`.
+    let job_tracking_session = session_id.map(str::to_owned);
+    let track_job = job_tracking_session.is_some()
+        && (progress_token.is_some() || state.job_notifier.job_updates_enabled());
+    let tracked_job_id: Option<String> = if track_job {
+        let sid = job_tracking_session.as_deref().unwrap();
+        state.job_notifier.subscribe_session(sid);
+        let handle = state.jobs.create(tool_name.clone());
+        let id = handle.read().id.clone();
+        state
+            .job_notifier
+            .register_job(&id, sid, progress_token.clone());
+        state.jobs.start(&id);
+        Some(id)
+    } else {
+        None
+    };
+
     if let Some(ref rid) = req_id_str {
         let entry = InFlightEntry::new(cancel_token.clone(), progress_reporter.clone());
         state.in_flight.insert(rid.clone(), entry);
@@ -1267,6 +1295,21 @@ async fn handle_tools_call_inner(
 
     if let Some(ref rid) = req_id_str {
         state.in_flight.remove(rid);
+    }
+
+    // ── Drive the tracked job to its terminal state (#326) ──────────────
+    if let Some(ref jid) = tracked_job_id {
+        match &dispatch_outcome {
+            Ok(v) => {
+                state.jobs.complete(jid, v.clone());
+            }
+            Err(msg) if msg == "CANCELLED" => {
+                state.jobs.cancel(jid);
+            }
+            Err(msg) => {
+                state.jobs.fail(jid, msg.clone());
+            }
+        }
     }
 
     let mut call_result = match dispatch_outcome {
