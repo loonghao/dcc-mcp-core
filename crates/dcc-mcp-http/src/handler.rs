@@ -1147,7 +1147,17 @@ async fn handle_tools_call_inner(
     let should_dispatch_async = async_opt_in || has_progress_token || action_declares_async;
     if should_dispatch_async {
         let parent_job_id = meta_dcc.and_then(|d| d.parent_job_id.clone());
-        return dispatch_async_job(state, req, resolved_name, call_params, parent_job_id).await;
+        let progress_token = params.meta.as_ref().and_then(|m| m.progress_token.clone());
+        return dispatch_async_job(
+            state,
+            req,
+            resolved_name,
+            call_params,
+            parent_job_id,
+            session_id,
+            progress_token,
+        )
+        .await;
     }
 
     // ── Register in-flight entry (#240 progress + #241 cancellation) ─────
@@ -1475,6 +1485,8 @@ async fn dispatch_async_job(
     resolved_name: String,
     call_params: Value,
     parent_job_id: Option<String>,
+    session_id: Option<&str>,
+    progress_token: Option<Value>,
 ) -> Result<JsonRpcResponse, HttpError> {
     let job_handle = state
         .jobs
@@ -1483,6 +1495,17 @@ async fn dispatch_async_job(
         let j = job_handle.read();
         (j.id.clone(), j.cancel_token.clone())
     };
+
+    // ── Wire job lifecycle notifications (#326) ──────────────────────────
+    // Map job_id → (session_id, progress_token) so JobNotifier can fan out
+    // both `notifications/progress` (if progress_token was supplied) and
+    // `notifications/$/dcc.jobUpdated` on every status transition.
+    if let Some(sid) = session_id {
+        state.job_notifier.subscribe_session(sid);
+        state
+            .job_notifier
+            .register_job(&job_id, sid, progress_token.clone());
+    }
 
     tracing::info!(
         job_id = %job_id,
