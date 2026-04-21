@@ -59,6 +59,7 @@ mod tests {
             lazy_actions: false,
 
             bare_tool_names: true,
+            jobs: std::sync::Arc::new(crate::job::JobManager::new()),
         }
     }
 
@@ -581,6 +582,7 @@ mod tests {
             lazy_actions: false,
 
             bare_tool_names: true,
+            jobs: std::sync::Arc::new(crate::job::JobManager::new()),
         }
     }
 
@@ -1353,6 +1355,7 @@ mod tests {
             lazy_actions: false,
 
             bare_tool_names: true,
+            jobs: std::sync::Arc::new(crate::job::JobManager::new()),
         }
     }
 
@@ -1720,6 +1723,7 @@ mod tests {
             lazy_actions: false,
 
             bare_tool_names: true,
+            jobs: std::sync::Arc::new(crate::job::JobManager::new()),
         }
     }
 
@@ -1825,6 +1829,7 @@ mod tests {
             lazy_actions: false,
 
             bare_tool_names: true,
+            jobs: std::sync::Arc::new(crate::job::JobManager::new()),
         };
 
         use crate::handler::{handle_delete, handle_get, handle_post};
@@ -2054,6 +2059,7 @@ mod tests {
             lazy_actions: false,
 
             bare_tool_names: true,
+            jobs: std::sync::Arc::new(crate::job::JobManager::new()),
         }
     }
 
@@ -2849,6 +2855,7 @@ mod resource_link_integration_tests {
             lazy_actions: false,
 
             bare_tool_names: true,
+            jobs: std::sync::Arc::new(crate::job::JobManager::new()),
         }
     }
 
@@ -3035,6 +3042,7 @@ mod resource_link_integration_tests {
             lazy_actions: false,
 
             bare_tool_names: true,
+            jobs: std::sync::Arc::new(crate::job::JobManager::new()),
         }
     }
 
@@ -3313,6 +3321,7 @@ mod lazy_actions_tests {
             pending_elicitations: std::sync::Arc::new(dashmap::DashMap::new()),
             lazy_actions,
             bare_tool_names: true,
+            jobs: std::sync::Arc::new(crate::job::JobManager::new()),
         }
     }
 
