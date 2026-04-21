@@ -2905,15 +2905,18 @@ mod gateway_tests {
 
     #[tokio::test]
     async fn test_gateway_get_sse_returns_session_id_header() {
-        let server = TestServer::new(make_gateway_router());
-        let resp = server
-            .get("/mcp")
-            .add_header(
-                axum::http::header::ACCEPT,
-                "text/event-stream".parse::<HeaderValue>().unwrap(),
-            )
-            .await;
-        resp.assert_status_ok();
+        let server = TestServer::builder()
+            .http_transport()
+            .build(make_gateway_router());
+        let client = reqwest::Client::new();
+        let url = server.server_url("/mcp").unwrap();
+        let resp = client
+            .get(url.as_str())
+            .header(axum::http::header::ACCEPT, "text/event-stream")
+            .send()
+            .await
+            .expect("GET /mcp SSE request must succeed");
+        assert_eq!(resp.status(), 200);
         let sid = resp
             .headers()
             .get("Mcp-Session-Id")
