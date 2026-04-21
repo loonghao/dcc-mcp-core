@@ -1649,6 +1649,7 @@ async fn dispatch_async_job(
         }],
         structured_content: Some(structured_with_meta),
         is_error: false,
+        meta: None,
     };
     Ok(JsonRpcResponse::success(
         req.id.clone(),

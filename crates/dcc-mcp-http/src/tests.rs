@@ -3923,6 +3923,7 @@ mod next_tools_meta_tests {
             lazy_actions: false,
             bare_tool_names: true,
             jobs: std::sync::Arc::new(crate::job::JobManager::new()),
+            job_notifier: crate::notifications::JobNotifier::new(SessionManager::new(), true),
             resources: crate::resources::ResourceRegistry::new(true, false),
             enable_resources: true,
         }
