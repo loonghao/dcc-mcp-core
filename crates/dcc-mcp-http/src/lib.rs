@@ -46,6 +46,7 @@ pub mod gateway;
 pub mod handler;
 pub mod inflight;
 pub mod job;
+pub mod job_storage;
 pub mod notifications;
 pub mod protocol;
 pub mod resource_link;
@@ -66,6 +67,9 @@ pub use error::{HttpError, HttpResult};
 pub use executor::{DccExecutorHandle, DeferredExecutor};
 pub use gateway::{GatewayConfig, GatewayHandle, GatewayRunner};
 pub use job::{Job, JobEvent, JobManager, JobProgress, JobStatus, JobSubscriber};
+#[cfg(feature = "job-persist-sqlite")]
+pub use job_storage::SqliteStorage;
+pub use job_storage::{InMemoryStorage, JobFilter, JobStorage, JobStorageError};
 pub use notifications::{JobNotifier, WorkflowProgress, WorkflowUpdate};
 pub use resources::{
     ProducerContent, ResourceError, ResourceProducer, ResourceRegistry, ResourceResult,
