@@ -309,8 +309,14 @@ dcc-mcp-server ← dcc-mcp-http
 - `filesystem` — Platform-specific directories via `dirs` crate
 - `type_wrappers` — RPyC-safe wrappers (BooleanWrapper, IntWrapper, FloatWrapper, StringWrapper)
 - `constants` — App metadata and environment variable names
+- `file_logging` — Rolling-file `tracing` subscriber with size/daily rotation and retention pruning
+- `log_config` — Global subscriber bootstrap + reload handle for swapping the file layer
 
-**Dependencies**: `dirs`
+**Maintainer layout**:
+- `file_logging.rs` is a thin facade that keeps the public install / shutdown / `flush_logs` entry points and the process-wide handles. Configuration types (`RotationPolicy`, `FileLoggingConfig`, `FileLoggingError`) live in `file_logging_config.rs`; the `RollingFileWriter`, `Inner` rotation state, `CalendarDate`, and filesystem helpers live in `file_logging_writer.rs`; the PyO3 wrappers live in `file_logging_python.rs`; and unit tests live in `file_logging_tests.rs`.
+- This keeps the install-pipeline easy to follow without mixing rotation bookkeeping, env-var parsing, and PyO3 translation in one block.
+
+**Dependencies**: `dirs`, `tracing`, `tracing-subscriber`, `tracing-appender`, `parking_lot`, `time`
 
 ## Skills-First Architecture
 
