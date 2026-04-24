@@ -194,6 +194,9 @@ dcc-mcp-server ← dcc-mcp-http
 
 **Dependencies**: `tokio`, `sysinfo`
 
+**Maintainer layout (dcc-mcp-usd)**:
+- `src/types.rs` is a thin facade over the six core USD data types. `SdfPath` lives in `types_sdf_path.rs`, `VtValue` in `types_vt_value.rs`, `UsdAttribute` in `types_attribute.rs`, `UsdPrim` (+ the `default_true` serde helper) in `types_prim.rs`, `UsdLayer` (+ the `default_y_axis` / `default_mpu` serde helpers) in `types_layer.rs`, and `UsdStageMetrics` in `types_metrics.rs`. Unit tests live in `types_tests.rs`. The facade re-exports every type so `dcc_mcp_usd::types::{SdfPath, VtValue, UsdAttribute, UsdPrim, UsdLayer, UsdStageMetrics}` keeps working unchanged.
+
 **Maintainer layout**:
 - `src/python.rs` is a thin facade over the PyO3 bindings: the shared Tokio runtime handle, `ProcessError → PyErr` adaptor, and `ProcessStatus → &'static str` serialiser live in `python_helpers.rs`; each Python-facing class lives in its own focused sibling — `python_monitor.rs` (`PyProcessMonitor`), `python_launcher.rs` (`PyDccLauncher`), `python_crash_policy.rs` (`PyCrashRecoveryPolicy` + the `parse_status` helper), `python_watcher.rs` (`PyProcessWatcher` + the internal `PyWatcherEvent` event type), `python_standalone_dispatcher.rs` (`PyStandaloneDispatcher`), and `python_pumped_dispatcher.rs` (`PyPumpedDispatcher` + the `parse_affinity` / `outcome_to_dict` helpers). The facade re-exports every `Py*` class and keeps `register_classes` as the single registration entry point.
 
