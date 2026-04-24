@@ -293,6 +293,7 @@ dcc-mcp-server ← dcc-mcp-http
 - `src/server.rs` keeps the public server types and startup orchestration, while background tasks, gateway bootstrap, and listener spawn strategies live in dedicated implementation modules.
 - `src/job.rs` is a thin facade over the in-process async job tracker: `Job` / `JobStatus` / `JobProgress` / `JobEvent` data live in `job_types.rs`, the `JobManager` registry (transitions, persistence, subscriptions, GC) lives in `job_manager.rs`, and unit tests live in `job_tests.rs`.
 - `src/resources.rs` keeps the `ResourceRegistry` (producer wiring, subscription state, `notify_updated` fan-out); the `ResourceProducer` trait + content/error types live in `resources_types.rs`, the built-in producers (`scene://`, `capture://`, `audit://`, `artefact://`) live in `resources_producers.rs`, and unit tests live in `resources_tests.rs`.
+- `src/prompts.rs` keeps the `PromptRegistry` (lazy cache, skill-set invalidation, `list` / `get` surface); the YAML spec types + `PromptError` live in `prompts_spec.rs`, the `{{name}}` template engine lives in `prompts_template.rs`, the sibling-file / glob loader plus the workflow-derived prompt generator live in `prompts_loader.rs`, and unit tests live in `prompts_tests.rs`.
 
 ### dcc-mcp-server
 
