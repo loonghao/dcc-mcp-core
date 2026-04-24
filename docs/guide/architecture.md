@@ -142,6 +142,11 @@ dcc-mcp-server ← dcc-mcp-http
 
 **Dependencies**: `dcc-mcp-models`
 
+**Maintainer layout**:
+- `types.rs` is now a thin re-export surface; tool/resource/prompt models live in focused internal modules.
+- `mock/config.rs` keeps the public `MockConfig` API while defaults, builder methods, and DCC presets live in separate implementation files.
+- `mock/adapter.rs` keeps shared state and helpers while trait implementations are split by capability (`connection`, `scene_manager`, `transform`, `hierarchy`, etc.).
+
 ### dcc-mcp-transport
 
 **Purpose**: IPC and network transport layer with service discovery, sessions, and connection pooling.
@@ -262,6 +267,10 @@ dcc-mcp-server ← dcc-mcp-http
 **SSE Support**: `GET /mcp` long-lived SSE stream for server-push events
 
 **Dependencies**: `axum`, `tokio`, `reqwest`, `socket2`, `dcc-mcp-transport`, `dcc-mcp-protocols`, `dcc-mcp-actions`, `dcc-mcp-skills`
+
+**Maintainer layout**:
+- `src/tests/gateway.rs` is a shared fixture module; gateway tests are split into focused submodules for REST, MCP methods, batch handling, session headers, subscriptions, runner competition, and pagination.
+- Legacy unreferenced `segment_*` test fragments were removed so the crate test tree mirrors real runtime responsibilities.
 
 ### dcc-mcp-server
 
@@ -386,6 +395,7 @@ Using `thiserror` for error types with `#[from]` for automatic conversion.
 - **Unit tests**: Each crate has inline `#[cfg(test)]` modules
 - **Integration tests**: `tests/` directory with Python + Rust tests (via `cargo test` and `pytest`)
 - **Coverage tracking**: `cargo-llvm-cov` + `pytest --cov`
+- **Preferred Rust test shape**: keep helper fixtures in a thin root module and split large suites by behavior domain instead of appending more scenarios to a monolithic file
 
 ## Build Commands
 
