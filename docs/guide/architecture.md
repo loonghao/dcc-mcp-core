@@ -194,6 +194,9 @@ dcc-mcp-server ← dcc-mcp-http
 
 **Dependencies**: `tokio`, `sysinfo`
 
+**Maintainer layout (dcc-mcp-transport)**:
+- `src/discovery/file_registry.rs` keeps the `FileRegistry` struct and every `impl FileRegistry` method in place (private fields would otherwise require workarounds); the 298-line `#[cfg(test)] mod tests` block is extracted into `file_registry_tests.rs` and mounted via `#[cfg(test)] #[path = "file_registry_tests.rs"] mod tests;`. File drops from 759 to 463 lines with no behaviour change.
+
 **Maintainer layout (dcc-mcp-usd)**:
 - `src/types.rs` is a thin facade over the six core USD data types. `SdfPath` lives in `types_sdf_path.rs`, `VtValue` in `types_vt_value.rs`, `UsdAttribute` in `types_attribute.rs`, `UsdPrim` (+ the `default_true` serde helper) in `types_prim.rs`, `UsdLayer` (+ the `default_y_axis` / `default_mpu` serde helpers) in `types_layer.rs`, and `UsdStageMetrics` in `types_metrics.rs`. Unit tests live in `types_tests.rs`. The facade re-exports every type so `dcc_mcp_usd::types::{SdfPath, VtValue, UsdAttribute, UsdPrim, UsdLayer, UsdStageMetrics}` keeps working unchanged.
 
