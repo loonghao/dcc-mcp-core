@@ -1,22 +1,12 @@
-refactor(actions): split pipeline/python.rs into responsibility-scoped siblings
+refactor(shm): extract SharedBuffer tests into sibling module
 
-pipeline/python.rs (747 lines) becomes a 67-line thin facade that mounts
-four focused siblings via #[path]:
+buffer.rs (720 lines) drops to 553 lines by moving the 168-line
+#[cfg(test)] mod tests block into a sibling buffer_tests.rs mounted
+via #[cfg(test)] #[path = "buffer_tests.rs"] mod tests;
 
-- python_helpers (value_to_py + PyCallableHook)
-- python_middleware (PyLoggingMiddleware, PyTimingMiddleware,
-  PyAuditMiddleware, PyRateLimitMiddleware) — inner fields upgraded to
-  pub(super) so the pipeline module can still construct them
-- python_shared (SharedTimingMiddleware / SharedAuditMiddleware /
-  SharedRateLimitMiddleware Arc newtypes that implement ActionMiddleware)
-- python_pipeline (PyActionPipeline, the Python-facing ToolPipeline)
+Production types (SharedBuffer, BufferDescriptor, gc_orphans) and all
+private helpers (RegionHeader, is_header_expired, gc_orphans_scan) stay
+co-located to retain access to SharedBuffer::inner / read_header and
+BufferDescriptor::from_buffer which relies on private struct fields.
 
-Every Python class is re-exported so pipeline::python::{PyActionPipeline,
-PyLoggingMiddleware, …} keeps working unchanged for downstream callers.
-The Shared* newtypes are re-exported under #[cfg(test)] so the existing
-python_tests.rs unit tests continue to reference super::python::Shared*
-unchanged.
-
-228 + 8 pipeline tests green with default features; workspace cargo check
-clean. The python-bindings lib-tests compile errors in events.rs are
-pre-existing on HEAD and unrelated to this refactor.
+61 + 2 shm tests continue to pass unchanged.

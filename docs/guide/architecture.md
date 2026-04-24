@@ -194,6 +194,9 @@ dcc-mcp-server ← dcc-mcp-http
 
 **Dependencies**: `tokio`, `sysinfo`
 
+**Maintainer layout (dcc-mcp-shm)**:
+- `src/buffer.rs` is trimmed from 720 to 553 lines by moving the `#[cfg(test)] mod tests { ... }` block (61 integration-style tests across `test_create`, `test_open`, `test_gc`, `test_descriptor` submodules) into a sibling `buffer_tests.rs`. Mounted via `#[cfg(test)] #[path = "buffer_tests.rs"] mod tests;`. Production types (`SharedBuffer`, `BufferDescriptor`, `gc_orphans`) and all private helpers stay co-located to retain access to `SharedBuffer::inner` / `read_header` etc.
+
 **Maintainer layout (dcc-mcp-actions pipeline)**:
 - `src/pipeline/python.rs` becomes a 67-line facade that mounts four siblings via `#[path]`: `python_helpers` (`value_to_py`, `PyCallableHook`), `python_middleware` (`PyLoggingMiddleware`, `PyTimingMiddleware`, `PyAuditMiddleware`, `PyRateLimitMiddleware` — inner fields `pub(super)` so the pipeline can construct them), `python_shared` (`Shared{Timing,Audit,RateLimit}Middleware` `Arc` newtypes implementing `ActionMiddleware`), `python_pipeline` (`PyActionPipeline` — the Python-facing `ToolPipeline`). Every Python class is re-exported so `pipeline::python::{PyActionPipeline, PyLoggingMiddleware, …}` keeps working. The `Shared*` newtypes are re-exported under `#[cfg(test)]` so the existing `python_tests.rs` unit tests can reference `super::python::Shared*` unchanged.
 
