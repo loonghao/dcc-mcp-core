@@ -291,6 +291,7 @@ dcc-mcp-server ← dcc-mcp-http
 - `src/handlers/tools_call.rs` is now a thin facade; request resolution, async job dispatch, sync execution, and result shaping live in focused helper modules.
 - `src/gateway/handlers.rs` is a routing facade; SSE, REST, MCP batch/request handling, notification forwarding, and instance proxying are split into dedicated files.
 - `src/server.rs` keeps the public server types and startup orchestration, while background tasks, gateway bootstrap, and listener spawn strategies live in dedicated implementation modules.
+- `src/job.rs` is a thin facade over the in-process async job tracker: `Job` / `JobStatus` / `JobProgress` / `JobEvent` data live in `job_types.rs`, the `JobManager` registry (transitions, persistence, subscriptions, GC) lives in `job_manager.rs`, and unit tests live in `job_tests.rs`.
 
 ### dcc-mcp-server
 
