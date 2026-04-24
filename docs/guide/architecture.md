@@ -206,6 +206,18 @@ dcc-mcp-server ← dcc-mcp-http
 **Maintainer layout (dcc-mcp-usd)**:
 - `src/types.rs` is a thin facade over the six core USD data types. `SdfPath` lives in `types_sdf_path.rs`, `VtValue` in `types_vt_value.rs`, `UsdAttribute` in `types_attribute.rs`, `UsdPrim` (+ the `default_true` serde helper) in `types_prim.rs`, `UsdLayer` (+ the `default_y_axis` / `default_mpu` serde helpers) in `types_layer.rs`, and `UsdStageMetrics` in `types_metrics.rs`. Unit tests live in `types_tests.rs`. The facade re-exports every type so `dcc_mcp_usd::types::{SdfPath, VtValue, UsdAttribute, UsdPrim, UsdLayer, UsdStageMetrics}` keeps working unchanged.
 
+**Maintainer layout (dcc-mcp-skills resolver)**:
+- `src/resolver.rs` keeps the production dependency-resolution logic (`resolve_dependencies`, `resolve_skill_order`, `topological_sort`, cycle detection) in place; the 321-line `#[cfg(test)] mod tests` block — covering happy paths, missing deps, cycles, diamond graphs, and edge cases — is extracted into a sibling `resolver_tests.rs` and mounted via `#[cfg(test)] #[path = "resolver_tests.rs"] mod tests;`. File drops from 685 to 365 lines.
+
+**Maintainer layout (dcc-mcp-artefact)**:
+- `src/lib.rs` retains `FileRef`, `ArtefactStore` trait, `FilesystemArtefactStore`, `InMemoryArtefactStore`, and all `put_*` / `resolve` helpers. The `#[cfg(test)] mod tests` block (round-trip JSON, idempotency, TTL, filesystem persistence) lives in `lib_tests.rs` and is mounted via `#[cfg(test)] #[path = "lib_tests.rs"] mod tests;`.
+
+**Maintainer layout (dcc-mcp-scheduler)**:
+- `src/service.rs` keeps `SchedulerService`, `SchedulerHandle`, `SchedulerConfig`, and cron/webhook trigger dispatch in place. The `#[cfg(test)] mod tests` block (cron-spec coverage, `max_concurrent` gating, HMAC verification) is extracted into `service_tests.rs` and mounted via `#[cfg(test)] #[path = "service_tests.rs"] mod tests;`.
+
+**Maintainer layout (dcc-mcp-capture python)**:
+- `src/python.rs` retains every `#[pyclass]` / `#[pymethods]` binding (`PyCapturer`, `PyCaptureFrame`, `PyWindowFinder`, `PyWindowInfo`, `PyCaptureTarget`). The test module — exercising the Mock backend and capability detection — is extracted into `python_tests.rs` and mounted via `#[cfg(test)] #[path = "python_tests.rs"] mod tests;`.
+
 **Maintainer layout**:
 - `src/python.rs` is a thin facade over the PyO3 bindings: the shared Tokio runtime handle, `ProcessError → PyErr` adaptor, and `ProcessStatus → &'static str` serialiser live in `python_helpers.rs`; each Python-facing class lives in its own focused sibling — `python_monitor.rs` (`PyProcessMonitor`), `python_launcher.rs` (`PyDccLauncher`), `python_crash_policy.rs` (`PyCrashRecoveryPolicy` + the `parse_status` helper), `python_watcher.rs` (`PyProcessWatcher` + the internal `PyWatcherEvent` event type), `python_standalone_dispatcher.rs` (`PyStandaloneDispatcher`), and `python_pumped_dispatcher.rs` (`PyPumpedDispatcher` + the `parse_affinity` / `outcome_to_dict` helpers). The facade re-exports every `Py*` class and keeps `register_classes` as the single registration entry point.
 
