@@ -623,23 +623,7 @@ mod test_metadata_compat {
     }
 
     #[test]
-    fn legacy_form_flags_non_compliant() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dir = tmp.path().join("legacy");
-        write_skill(
-            &dir,
-            "---\nname: legacy\ndcc: maya\nversion: \"2.0.0\"\ntags: [a, b]\n---\n# body\n",
-        );
-        let meta = parse_skill_md(&dir).expect("parsed");
-        assert_eq!(meta.dcc, "maya");
-        assert_eq!(meta.version, "2.0.0");
-        assert_eq!(meta.tags, vec!["a".to_string(), "b".to_string()]);
-        assert!(!meta.is_spec_compliant());
-        assert!(meta.legacy_extension_fields.iter().any(|s| s == "dcc"));
-    }
-
-    #[test]
-    fn new_form_is_spec_compliant() {
+    fn new_form_metadata_overrides() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path().join("new");
         let body = r#"---
@@ -656,7 +640,6 @@ metadata:
 "#;
         write_skill(&dir, body);
         let meta = parse_skill_md(&dir).expect("parsed");
-        assert!(meta.is_spec_compliant(), "expected spec compliant");
         assert_eq!(meta.dcc, "maya");
         assert_eq!(meta.version, "2.0.0");
         assert_eq!(meta.tags, vec!["a".to_string(), "b".to_string()]);
@@ -679,12 +662,10 @@ metadata:
         write_skill(&dir, body);
         let meta = parse_skill_md(&dir).expect("parsed");
         assert_eq!(meta.dcc, "maya", "metadata.dcc-mcp.dcc must win");
-        // still marked legacy because top-level dcc was present
-        assert!(!meta.is_spec_compliant());
     }
 
     #[test]
-    fn nested_form_is_spec_compliant() {
+    fn nested_form_metadata_overrides() {
         // Canonical agentskills.io shape produced by the migration tool
         // and by `yaml.safe_dump` — `metadata.dcc-mcp` is a nested map.
         let tmp = tempfile::tempdir().unwrap();
@@ -710,7 +691,6 @@ metadata:
 "#;
         std::fs::write(dir.join(SKILL_METADATA_FILE), body).unwrap();
         let meta = parse_skill_md(&dir).expect("parsed");
-        assert!(meta.is_spec_compliant(), "nested form must be compliant");
         assert_eq!(meta.dcc, "maya");
         assert_eq!(meta.version, "1.0.0");
         assert_eq!(meta.tags, vec!["maya".to_string(), "animation".to_string()]);
@@ -739,7 +719,6 @@ metadata:
 "#;
         std::fs::write(dir.join(SKILL_METADATA_FILE), body).unwrap();
         let meta = parse_skill_md(&dir).expect("parsed");
-        assert!(meta.is_spec_compliant());
         assert_eq!(meta.tools.len(), 2);
         assert_eq!(meta.tools[0].name, "create_sphere");
         assert_eq!(meta.tools[0].description, "make a sphere");
@@ -801,8 +780,6 @@ metadata:
         assert_eq!(legacy.version, newf.version);
         assert_eq!(legacy.tags, newf.tags);
         assert_eq!(legacy.search_hint, newf.search_hint);
-        assert!(!legacy.is_spec_compliant());
-        assert!(newf.is_spec_compliant());
     }
 
     // ── Issue #344 — ToolAnnotations from sibling tools.yaml ──────────
@@ -938,7 +915,6 @@ metadata:
 "#;
         std::fs::write(dir.join(SKILL_METADATA_FILE), body).unwrap();
         let meta = parse_skill_md(&dir).expect("parsed");
-        assert!(meta.is_spec_compliant());
         assert_eq!(meta.tools.len(), 1);
         let nt = &meta.tools[0].next_tools;
         assert_eq!(
@@ -949,32 +925,6 @@ metadata:
             ]
         );
         assert_eq!(nt.on_failure, vec!["diagnostics__screenshot".to_string()]);
-    }
-
-    #[test]
-    fn top_level_next_tools_is_legacy_and_non_compliant() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dir = tmp.path().join("legacy_nt");
-        let body = r#"---
-name: legacy_nt
-dcc: maya
-next-tools:
-  on-success: [foo]
----
-"#;
-        write_skill(&dir, body);
-        let meta = parse_skill_md(&dir).expect("parsed");
-        assert!(
-            !meta.is_spec_compliant(),
-            "top-level next-tools must be flagged as legacy",
-        );
-        assert!(
-            meta.legacy_extension_fields
-                .iter()
-                .any(|s| s == "next-tools"),
-            "legacy_extension_fields must name next-tools; got {:?}",
-            meta.legacy_extension_fields,
-        );
     }
 
     // ── SkillDefaults: defaults merging in sibling tools.yaml ────────

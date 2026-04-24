@@ -207,16 +207,6 @@ pub struct SkillMetadata {
     #[serde(default)]
     pub groups: Vec<SkillGroup>,
 
-    /// Names of legacy top-level extension fields detected while parsing
-    /// this skill's SKILL.md (issue #356).
-    ///
-    /// Populated by the loader, not by serde. When empty the skill uses the
-    /// agentskills.io-compliant `metadata.dcc-mcp.*` form exclusively; when
-    /// non-empty the skill still relies on deprecated top-level extension
-    /// keys. See [`SkillMetadata::is_spec_compliant`].
-    #[serde(default, skip_serializing, skip_deserializing)]
-    pub legacy_extension_fields: Vec<String>,
-
     /// Sibling-file reference for the MCP prompts primitive (issues #351, #355).
     ///
     /// Set from `metadata.dcc-mcp.prompts` in SKILL.md frontmatter. The value
@@ -340,17 +330,6 @@ impl SkillMetadata {
                     .collect()
             })
             .unwrap_or_default()
-    }
-
-    /// Returns `true` iff no legacy top-level extension fields were used
-    /// when this skill's SKILL.md was parsed.
-    ///
-    /// Spec-compliant skills declare all dcc-mcp-specific keys under the
-    /// `metadata.dcc-mcp.*` namespace (agentskills.io v1.0). Legacy skills
-    /// declared them as top-level YAML fields (`dcc`, `tags`, `tools`, …).
-    /// See issue #356.
-    pub fn is_spec_compliant(&self) -> bool {
-        self.legacy_extension_fields.is_empty()
     }
 
     /// Returns true if this skill has any validation warnings.
@@ -570,7 +549,6 @@ impl SkillMetadata {
             policy: None,
             external_deps: None,
             groups: Vec::new(),
-            legacy_extension_fields: Vec::new(),
             prompts_file: None,
         }
     }
@@ -841,21 +819,6 @@ impl SkillMetadata {
     #[pyo3(name = "validate")]
     fn py_validate(&self) -> Vec<String> {
         SkillMetadata::validate(self)
-    }
-
-    /// Returns ``True`` iff this skill uses the agentskills.io-compliant
-    /// ``metadata.dcc-mcp.*`` form exclusively (no legacy top-level
-    /// extension keys).  See issue #356.
-    #[pyo3(name = "is_spec_compliant")]
-    fn py_is_spec_compliant(&self) -> bool {
-        SkillMetadata::is_spec_compliant(self)
-    }
-
-    /// Names of legacy top-level extension fields that were observed when
-    /// parsing this skill's SKILL.md.  Empty list ⇒ spec-compliant.
-    #[getter]
-    fn legacy_extension_fields(&self) -> Vec<String> {
-        self.legacy_extension_fields.clone()
     }
 
     /// Union of DCC capabilities required by any tool in this skill (issue #354).

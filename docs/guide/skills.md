@@ -711,7 +711,7 @@ The `tags` and `dcc` filter arguments are applied *before* scoring.
 
 ## Migrating pre-0.15 SKILL.md
 
-Starting with dcc-mcp-core 0.15 (issue [#356](https://github.com/loonghao/dcc-mcp-core/issues/356)), dcc-mcp-core-specific extension keys (`dcc`, `version`, `tags`, `tools`, …) should live under the agentskills.io-compliant `metadata.dcc-mcp.*` namespace rather than at the top level of SKILL.md frontmatter. Top-level extension keys continue to parse but emit a one-shot deprecation warning per skill, and `SkillMetadata.is_spec_compliant()` returns `False` for them.
+Starting with dcc-mcp-core 0.15 (issue [#356](https://github.com/loonghao/dcc-mcp-core/issues/356)), dcc-mcp-core-specific extension keys (`dcc`, `version`, `tags`, `tools`, …) should live under the agentskills.io-compliant `metadata.dcc-mcp.*` namespace rather than at the top level of SKILL.md frontmatter. Top-level extension keys continue to parse but emit a one-shot deprecation warning per skill.
 
 ### Before (pre-0.15, legacy — still works, now deprecated)
 
@@ -847,9 +847,7 @@ and the rest of the skill loads normally — a single malformed name
 will not fail the whole skill.
 
 A legacy top-level `next-tools:` block on SKILL.md still parses for
-backward compatibility but emits a deprecation warning and flips
-`SkillMetadata.is_spec_compliant()` to `False` (`next-tools` appears
-in `legacy_extension_fields`).
+backward compatibility but emits a deprecation warning.
 
 ### Metadata key reference
 
@@ -871,14 +869,6 @@ in `legacy_extension_fields`).
 
 - When both forms are present, the `metadata.dcc-mcp.*` value wins.
 - If only the legacy top-level field is present, it is still read (backward compatibility) and the loader emits a single `tracing::warn!` per skill.
-- Checking compliance programmatically:
-
-  ```python
-  skills, _skipped = dcc_mcp_core.scan_and_load(dcc_name="maya")
-  for s in skills:
-      if not s.is_spec_compliant():
-          print(f"{s.name}: legacy fields={s.legacy_extension_fields}")
-  ```
 
 A one-shot CLI migrator (`dcc-mcp-migrate-skill`) is planned as a follow-up; see the tracking issue for status.
 

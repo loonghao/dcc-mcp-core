@@ -5,10 +5,7 @@ These tests exercise the full pipeline:
 
 1. Sibling-file parsing: ``tools.yaml`` with per-tool ``next-tools``
    surfaces on ``SkillMetadata.tools[i].next_tools``.
-2. Legacy deprecation: a top-level ``next-tools:`` on SKILL.md parses
-   but flags the skill as non-spec-compliant and lists ``next-tools``
-   in ``legacy_extension_fields``.
-3. End-to-end: a running ``McpHttpServer`` attaches
+2. End-to-end: a running ``McpHttpServer`` attaches
    ``_meta["dcc.next_tools"]["on_success"]`` after success and
    ``_meta["dcc.next_tools"]["on_failure"]`` after an error, and
    omits the key entirely when the tool declared no next-tools.
@@ -70,7 +67,6 @@ metadata:
 
     meta = dcc_mcp_core.parse_skill_md(str(skill_dir))
     assert meta is not None
-    assert meta.is_spec_compliant()
     assert len(meta.tools) == 1
     tool = meta.tools[0]
     nt = tool.next_tools
@@ -80,29 +76,6 @@ metadata:
         "maya_geometry__assign_material",
     ]
     assert nt["on_failure"] == ["diagnostics__screenshot"]
-
-
-# ── Unit: top-level next-tools is legacy + deprecation ─────────────────────
-
-
-def test_top_level_next_tools_is_legacy(tmp_path: Path) -> None:
-    skill_dir = tmp_path / "legacy-nt"
-    _write_skill_md(
-        skill_dir,
-        """---
-name: legacy-nt
-dcc: maya
-next-tools:
-  on-success: [foo]
----
-""",
-    )
-    meta = dcc_mcp_core.parse_skill_md(str(skill_dir))
-    assert meta is not None
-    assert not meta.is_spec_compliant(), "A top-level next-tools: key must flag the skill as non-compliant"
-    assert "next-tools" in meta.legacy_extension_fields, (
-        f"legacy_extension_fields must name next-tools; got {meta.legacy_extension_fields!r}"
-    )
 
 
 # ── E2E: CallToolResult._meta["dcc.next_tools"] wiring ─────────────────────

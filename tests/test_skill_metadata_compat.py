@@ -1,9 +1,7 @@
 """Tests for agentskills.io-compliant ``metadata.dcc-mcp.*`` parsing.
 
-Covers issue #356: the SKILL.md loader dual-reads the new, spec-compliant
-``metadata.dcc-mcp.*`` keys and the legacy top-level extension fields,
-surfacing a ``is_spec_compliant()`` flag so callers can drive
-deprecation warnings.
+Covers issue #356: the SKILL.md loader reads the spec-compliant
+``metadata.dcc-mcp.*`` keys and the legacy top-level extension fields.
 """
 
 from __future__ import annotations
@@ -31,15 +29,6 @@ class TestLegacyForm:
         meta = _parse(LEGACY_FORM)
         assert meta.name == "legacy-form-skill"
 
-    def test_is_not_spec_compliant(self) -> None:
-        meta = _parse(LEGACY_FORM)
-        assert meta.is_spec_compliant() is False
-        # The loader must have flagged at least the `dcc` / `tools` keys.
-        legacy = meta.legacy_extension_fields
-        assert isinstance(legacy, list)
-        assert "dcc" in legacy
-        assert "tools" in legacy
-
     def test_values_populated(self) -> None:
         meta = _parse(LEGACY_FORM)
         assert meta.dcc == "maya"
@@ -56,11 +45,6 @@ class TestNewForm:
     def test_parses(self) -> None:
         meta = _parse(NEW_FORM)
         assert meta.name == "new-form-skill"
-
-    def test_is_spec_compliant(self) -> None:
-        meta = _parse(NEW_FORM)
-        assert meta.is_spec_compliant() is True
-        assert meta.legacy_extension_fields == []
 
     def test_values_populated(self) -> None:
         meta = _parse(NEW_FORM)
@@ -131,14 +115,6 @@ class TestInlineNewForm:
             encoding="utf-8",
         )
         meta = _parse(skill_dir)
-        assert meta.is_spec_compliant() is True
         assert meta.dcc == "houdini"
         assert meta.version == "0.1.0"
         assert meta.tags == ["a", "b"]
-
-
-def test_is_spec_compliant_signature_is_a_method() -> None:
-    """`is_spec_compliant` must be callable, not a property (issue #356 AC 4)."""
-    meta = dcc_mcp_core.SkillMetadata(name="smoke")
-    assert callable(meta.is_spec_compliant)
-    assert meta.is_spec_compliant() is True

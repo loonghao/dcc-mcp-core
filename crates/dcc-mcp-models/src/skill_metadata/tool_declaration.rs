@@ -231,6 +231,7 @@ pub struct ToolDeclaration {
         default,
         rename = "thread-affinity",
         alias = "thread_affinity",
+        alias = "affinity",
         skip_serializing_if = "is_default_affinity"
     )]
     pub thread_affinity: ThreadAffinity,
@@ -487,6 +488,7 @@ pub struct SkillDefaults {
         default,
         rename = "thread-affinity",
         alias = "thread_affinity",
+        alias = "affinity",
         skip_serializing_if = "Option::is_none"
     )]
     pub thread_affinity: Option<ThreadAffinity>,

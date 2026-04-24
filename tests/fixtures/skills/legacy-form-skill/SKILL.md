@@ -25,5 +25,4 @@ groups:
 
 This fixture declares all dcc-mcp-core extensions at the YAML top level,
 the way skills were authored before v0.15. The loader still accepts this
-form but emits a deprecation warning and `is_spec_compliant()` returns
-`False`.
+form but emits a deprecation warning.
