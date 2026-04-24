@@ -98,6 +98,11 @@ dcc-mcp-server ← dcc-mcp-http
 
 **Dependencies**: None (base crate)
 
+**Maintainer layout**:
+- `skill_metadata/mod.rs` now focuses on the public struct surface, while runtime helpers, serde parsing helpers, and Python bindings live in focused sibling modules.
+- `skill_metadata/tool_declaration.rs` keeps the declaration model and serde rules, while the PyO3 accessor surface lives in a dedicated sibling module.
+- This keeps spec-facing fields easy to scan without mixing frontmatter parsing, ClawHub helpers, and PyO3 accessors in one block.
+
 ### dcc-mcp-actions
 
 **Purpose**: Centralized action registry, validation, dispatch, and pipeline system.
@@ -114,6 +119,10 @@ dcc-mcp-server ← dcc-mcp-http
 
 **Dependencies**: `dcc-mcp-models`
 
+**Maintainer layout**:
+- `registry/mod.rs` keeps the core registry behavior, while `ActionMeta` and the Python binding shim live in focused sibling modules.
+- This separates Rust-side lookup/update semantics from PyO3 translation code and makes metadata evolution easier to review.
+
 ### dcc-mcp-skills
 
 **Purpose**: Zero-code skill package discovery, loading, and hot-reload via filesystem watching.
@@ -128,6 +137,12 @@ dcc-mcp-server ← dcc-mcp-http
 **Skill Package Format**: `SKILL.md` with YAML frontmatter (`name`, `version`, `description`, `tools`, `dcc`, `tags`, `depends`)
 
 **Dependencies**: `dcc-mcp-actions`, `dcc-mcp-models`
+
+**Maintainer layout**:
+- `catalog/catalog.rs` now focuses on query/read APIs, while discovery/bootstrap and load/unload lifecycle paths live in dedicated implementation files.
+- `loader/mod.rs` stays centered on single-skill `SKILL.md` parsing, while batch scan/load orchestration and filesystem enumeration helpers live in sibling modules.
+- `validator.rs` is a thin facade now; report types, validation rules, Python bindings, and unit tests each live in focused siblings.
+- This keeps search/ranking work separate from registry mutation and script-handler registration, which lowers the cognitive load for future refactors.
 
 ### dcc-mcp-protocols
 
