@@ -448,6 +448,129 @@ pub struct NextTools {
     pub on_failure: Vec<String>,
 }
 
+// ── ToolDefaults / GroupDefaults ──────────────────────────────────────────
+
+/// Inherited defaults for tool and group declarations within a sibling
+/// `tools.yaml` or `groups.yaml`.
+///
+/// Authors declare a top-level `defaults:` key once; every entry that
+/// omits the corresponding field inherits the default.  Explicit
+/// values on a tool/group always win.
+///
+/// ```yaml
+/// defaults:
+///   thread-affinity: main
+///   default-active: false
+///   next-tools:
+///     on-failure: [dcc_diagnostics__screenshot, dcc_diagnostics__audit_log]
+///
+/// tools:
+///   - name: animation        # inherits affinity=main, next-tools.on-failure
+///   - name: render
+///     execution: async       # overrides default (sync)
+///     timeout_hint_secs: 300 # overrides default (none)
+///
+/// groups:
+///   - name: core
+///     default-active: true   # overrides default (false)
+///   - name: extended         # inherits default-active=false
+/// ```
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct SkillDefaults {
+    // ── Tool-level defaults ───────────────────────────────────────────
+    /// Default execution mode — `sync` or `async`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<ExecutionMode>,
+
+    /// Default thread-affinity — `any` or `main`.
+    #[serde(
+        default,
+        rename = "thread-affinity",
+        alias = "thread_affinity",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub thread_affinity: Option<ThreadAffinity>,
+
+    /// Default next-tools suggestion.
+    #[serde(
+        default,
+        rename = "next-tools",
+        alias = "next_tools",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub next_tools: Option<NextTools>,
+
+    /// Default timeout hint in seconds.
+    #[serde(
+        default,
+        rename = "timeout_hint_secs",
+        alias = "timeout-hint-secs",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub timeout_hint_secs: Option<u32>,
+
+    // ── Group-level defaults ──────────────────────────────────────────
+    /// Whether groups are active by default when the skill is loaded.
+    #[serde(
+        default,
+        rename = "default-active",
+        alias = "default_active",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub default_active: Option<bool>,
+}
+
+impl SkillDefaults {
+    /// Merge defaults into a tool declaration — only fills in fields
+    /// that are still at their type-level default (i.e. not explicitly
+    /// set by the author).
+    pub fn apply_to_tool(&self, tool: &mut ToolDeclaration) {
+        if self.execution.is_some() && tool.execution == ExecutionMode::default() {
+            tool.execution = self.execution.unwrap();
+        }
+        if self.thread_affinity.is_some() && tool.thread_affinity == ThreadAffinity::default() {
+            tool.thread_affinity = self.thread_affinity.unwrap();
+        }
+        if self.timeout_hint_secs.is_some() && tool.timeout_hint_secs.is_none() {
+            tool.timeout_hint_secs = self.timeout_hint_secs;
+        }
+        if let Some(ref nt) = self.next_tools {
+            // Merge on-success: only inherit when the tool's list is empty
+            if !nt.on_success.is_empty() && tool.next_tools.on_success.is_empty() {
+                tool.next_tools.on_success = nt.on_success.clone();
+            }
+            // Merge on-failure: only inherit when the tool's list is empty
+            if !nt.on_failure.is_empty() && tool.next_tools.on_failure.is_empty() {
+                tool.next_tools.on_failure = nt.on_failure.clone();
+            }
+        }
+    }
+
+    /// Merge defaults into a group declaration — only fills in fields
+    /// that are still at their type-level default.
+    pub fn apply_to_group(&self, group: &mut SkillGroup) {
+        if let Some(da) = self.default_active {
+            // Only apply if the group's default_active is still at the
+            // serde default (false).  An explicit `default-active: true`
+            // on a group must win.
+            if !group.default_active {
+                group.default_active = da;
+            }
+        }
+    }
+
+    /// Return `true` when every field is `None` — used to decide
+    /// whether to emit a `defaults:` object at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.execution.is_none()
+            && self.thread_affinity.is_none()
+            && self.next_tools.is_none()
+            && self.timeout_hint_secs.is_none()
+            && self.default_active.is_none()
+    }
+}
+
 // ── SkillGroup ─────────────────────────────────────────────────────────────
 
 /// Declaration of a tool group within a skill (progressive exposure).

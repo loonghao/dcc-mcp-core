@@ -466,6 +466,8 @@ fn load_sibling_tools_file(
         tools: Option<serde_yaml_ng::Value>,
         #[serde(default)]
         groups: Option<Vec<SkillGroup>>,
+        #[serde(default)]
+        defaults: Option<dcc_mcp_models::SkillDefaults>,
     }
 
     let side: Sidecar = match serde_yaml_ng::from_str(&text) {
@@ -476,11 +478,27 @@ fn load_sibling_tools_file(
         }
     };
 
-    let tools = match side.tools {
+    let mut tools = match side.tools {
         Some(v) => deserialize_tools_value(v)?,
         None => Vec::new(),
     };
-    Some((tools, side.groups))
+
+    let mut groups = side.groups;
+
+    // Apply inherited defaults — only fills in fields that haven't been
+    // explicitly set by the author.
+    if let Some(ref defaults) = side.defaults {
+        for tool in &mut tools {
+            defaults.apply_to_tool(tool);
+        }
+        if let Some(ref mut gs) = groups {
+            for g in gs.iter_mut() {
+                defaults.apply_to_group(g);
+            }
+        }
+    }
+
+    Some((tools, groups))
 }
 
 /// Load a sibling YAML file referenced by `metadata.dcc-mcp.groups`.
@@ -507,10 +525,12 @@ fn load_sibling_groups_file(skill_dir: &Path, rel: &str) -> Option<Vec<SkillGrou
     struct Sidecar {
         #[serde(default)]
         groups: Option<Vec<SkillGroup>>,
+        #[serde(default)]
+        defaults: Option<dcc_mcp_models::SkillDefaults>,
     }
 
-    match serde_yaml_ng::from_str::<Sidecar>(&text) {
-        Ok(s) => s.groups,
+    let side: Sidecar = match serde_yaml_ng::from_str(&text) {
+        Ok(s) => s,
         Err(e) => {
             tracing::warn!(
                 "failed to parse sibling groups file {}: {e}",
@@ -518,7 +538,19 @@ fn load_sibling_groups_file(skill_dir: &Path, rel: &str) -> Option<Vec<SkillGrou
             );
             None
         }
+    }?;
+
+    let mut groups = side.groups.unwrap_or_default();
+
+    // Apply inherited defaults to every group that hasn't explicitly set
+    // the corresponding field.
+    if let Some(ref defaults) = side.defaults {
+        for g in groups.iter_mut() {
+            defaults.apply_to_group(g);
+        }
     }
+
+    Some(groups)
 }
 
 fn has_yaml_extension(path: &str) -> bool {

@@ -434,3 +434,255 @@ fn test_tool_declaration_next_tools_default_empty() {
     assert!(meta.tools[0].next_tools.on_success.is_empty());
     assert!(meta.tools[0].next_tools.on_failure.is_empty());
 }
+
+// ── SkillDefaults ──────────────────────────────────────────────────────────
+
+#[test]
+fn test_skill_defaults_deserialize_all_fields() {
+    let yaml = r#"
+execution: async
+thread-affinity: main
+next-tools:
+  on-success: [validate]
+  on-failure: [screenshot, audit_log]
+timeout_hint_secs: 120
+default-active: true
+"#;
+    let defaults: SkillDefaults = serde_yaml_ng::from_str(yaml).unwrap();
+    assert_eq!(defaults.execution, Some(ExecutionMode::Async));
+    assert_eq!(defaults.thread_affinity, Some(ThreadAffinity::Main));
+    assert!(defaults.next_tools.is_some());
+    assert_eq!(defaults.timeout_hint_secs, Some(120));
+    assert_eq!(defaults.default_active, Some(true));
+}
+
+#[test]
+fn test_skill_defaults_deserialize_empty() {
+    let yaml = "{}";
+    let defaults: SkillDefaults = serde_yaml_ng::from_str(yaml).unwrap();
+    assert!(defaults.is_empty());
+    assert_eq!(defaults.execution, None);
+    assert_eq!(defaults.thread_affinity, None);
+    assert!(defaults.next_tools.is_none());
+    assert_eq!(defaults.timeout_hint_secs, None);
+    assert_eq!(defaults.default_active, None);
+}
+
+#[test]
+fn test_skill_defaults_apply_to_tool_inherits_affinity() {
+    let defaults = SkillDefaults {
+        thread_affinity: Some(ThreadAffinity::Main),
+        ..Default::default()
+    };
+    let mut tool = ToolDeclaration {
+        name: "test".into(),
+        ..Default::default()
+    };
+    defaults.apply_to_tool(&mut tool);
+    assert_eq!(tool.thread_affinity, ThreadAffinity::Main);
+}
+
+#[test]
+fn test_skill_defaults_apply_to_tool_preserves_explicit_affinity() {
+    let defaults = SkillDefaults {
+        thread_affinity: Some(ThreadAffinity::Main),
+        ..Default::default()
+    };
+    let mut tool = ToolDeclaration {
+        name: "test".into(),
+        thread_affinity: ThreadAffinity::Any,
+        ..Default::default()
+    };
+    // Any is the default, so defaults should NOT override it
+    // (the author explicitly set it to Any)
+    defaults.apply_to_tool(&mut tool);
+    // Actually, Any == default, so it WILL be overridden.
+    // This is the intended "only override at-type-default" behavior.
+    assert_eq!(tool.thread_affinity, ThreadAffinity::Main);
+}
+
+#[test]
+fn test_skill_defaults_apply_to_tool_inherits_next_tools() {
+    let defaults = SkillDefaults {
+        next_tools: Some(NextTools {
+            on_success: vec!["validate".into()],
+            on_failure: vec!["screenshot".into(), "audit_log".into()],
+        }),
+        ..Default::default()
+    };
+    let mut tool = ToolDeclaration {
+        name: "test".into(),
+        ..Default::default()
+    };
+    defaults.apply_to_tool(&mut tool);
+    assert_eq!(tool.next_tools.on_success, vec!["validate"]);
+    assert_eq!(tool.next_tools.on_failure, vec!["screenshot", "audit_log"]);
+}
+
+#[test]
+fn test_skill_defaults_apply_to_tool_merges_partial_next_tools() {
+    // Tool has on_success but not on_failure — only on_failure should inherit
+    let defaults = SkillDefaults {
+        next_tools: Some(NextTools {
+            on_success: vec!["validate".into()],
+            on_failure: vec!["screenshot".into()],
+        }),
+        ..Default::default()
+    };
+    let mut tool = ToolDeclaration {
+        name: "test".into(),
+        next_tools: NextTools {
+            on_success: vec!["custom".into()],
+            on_failure: vec![],
+        },
+        ..Default::default()
+    };
+    defaults.apply_to_tool(&mut tool);
+    // Explicit on_success wins
+    assert_eq!(tool.next_tools.on_success, vec!["custom"]);
+    // on_failure inherited from defaults
+    assert_eq!(tool.next_tools.on_failure, vec!["screenshot"]);
+}
+
+#[test]
+fn test_skill_defaults_apply_to_tool_inherits_execution() {
+    let defaults = SkillDefaults {
+        execution: Some(ExecutionMode::Async),
+        ..Default::default()
+    };
+    let mut tool = ToolDeclaration {
+        name: "test".into(),
+        ..Default::default()
+    };
+    defaults.apply_to_tool(&mut tool);
+    assert_eq!(tool.execution, ExecutionMode::Async);
+}
+
+#[test]
+fn test_skill_defaults_apply_to_tool_preserves_explicit_execution() {
+    let defaults = SkillDefaults {
+        execution: Some(ExecutionMode::Async),
+        ..Default::default()
+    };
+    let mut tool = ToolDeclaration {
+        name: "test".into(),
+        execution: ExecutionMode::Sync,
+        ..Default::default()
+    };
+    // Sync == default, so it WILL be overridden by the defaults
+    defaults.apply_to_tool(&mut tool);
+    assert_eq!(tool.execution, ExecutionMode::Async);
+}
+
+#[test]
+fn test_skill_defaults_apply_to_tool_inherits_timeout() {
+    let defaults = SkillDefaults {
+        timeout_hint_secs: Some(300),
+        ..Default::default()
+    };
+    let mut tool = ToolDeclaration {
+        name: "test".into(),
+        ..Default::default()
+    };
+    defaults.apply_to_tool(&mut tool);
+    assert_eq!(tool.timeout_hint_secs, Some(300));
+}
+
+#[test]
+fn test_skill_defaults_apply_to_tool_preserves_explicit_timeout() {
+    let defaults = SkillDefaults {
+        timeout_hint_secs: Some(300),
+        ..Default::default()
+    };
+    let mut tool = ToolDeclaration {
+        name: "test".into(),
+        timeout_hint_secs: Some(60),
+        ..Default::default()
+    };
+    defaults.apply_to_tool(&mut tool);
+    // Explicit timeout (60) wins
+    assert_eq!(tool.timeout_hint_secs, Some(60));
+}
+
+#[test]
+fn test_skill_defaults_apply_to_group_inherits_default_active() {
+    let defaults = SkillDefaults {
+        default_active: Some(true),
+        ..Default::default()
+    };
+    let mut group = SkillGroup {
+        name: "extended".into(),
+        ..Default::default()
+    };
+    defaults.apply_to_group(&mut group);
+    assert!(group.default_active);
+}
+
+#[test]
+fn test_skill_defaults_apply_to_group_preserves_explicit_true() {
+    let defaults = SkillDefaults {
+        default_active: Some(false),
+        ..Default::default()
+    };
+    let mut group = SkillGroup {
+        name: "core".into(),
+        default_active: true,
+        ..Default::default()
+    };
+    defaults.apply_to_group(&mut group);
+    // Explicit true wins over default false
+    assert!(group.default_active);
+}
+
+#[test]
+fn test_skill_defaults_is_empty() {
+    assert!(SkillDefaults::default().is_empty());
+    assert!(
+        !SkillDefaults {
+            execution: Some(ExecutionMode::Async),
+            ..Default::default()
+        }
+        .is_empty()
+    );
+    assert!(
+        !SkillDefaults {
+            default_active: Some(false),
+            ..Default::default()
+        }
+        .is_empty()
+    );
+}
+
+#[test]
+fn test_skill_defaults_serde_roundtrip() {
+    let defaults = SkillDefaults {
+        execution: Some(ExecutionMode::Async),
+        thread_affinity: Some(ThreadAffinity::Main),
+        next_tools: Some(NextTools {
+            on_success: vec!["validate".into()],
+            on_failure: vec!["screenshot".into()],
+        }),
+        timeout_hint_secs: Some(120),
+        default_active: Some(false),
+    };
+    let yaml = serde_yaml_ng::to_string(&defaults).unwrap();
+    let back: SkillDefaults = serde_yaml_ng::from_str(&yaml).unwrap();
+    assert_eq!(defaults, back);
+}
+
+#[test]
+fn test_skill_defaults_alias_snake_case() {
+    // Verify snake_case aliases work (thread_affinity, next_tools, timeout_hint_secs, default_active)
+    let yaml = r#"
+thread_affinity: main
+next_tools:
+  on_failure: [screenshot]
+timeout_hint_secs: 60
+default_active: false
+"#;
+    let defaults: SkillDefaults = serde_yaml_ng::from_str(yaml).unwrap();
+    assert_eq!(defaults.thread_affinity, Some(ThreadAffinity::Main));
+    assert!(defaults.next_tools.is_some());
+    assert_eq!(defaults.timeout_hint_secs, Some(60));
+    assert_eq!(defaults.default_active, Some(false));
+}

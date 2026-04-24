@@ -7,8 +7,9 @@ pub mod skill_scope;
 pub use action_result::ActionResultModel as ToolResult;
 pub use action_result::{ActionResultModel, ActionResultModelData, SerializeFormat};
 pub use skill_metadata::{
-    ExecutionMode, NextTools, SkillDependencies, SkillDependency, SkillDependencyType, SkillGroup,
-    SkillMetadata, SkillPolicy, ThreadAffinity, ToolAnnotations, ToolDeclaration,
+    ExecutionMode, NextTools, SkillDefaults, SkillDependencies, SkillDependency,
+    SkillDependencyType, SkillGroup, SkillMetadata, SkillPolicy, ThreadAffinity, ToolAnnotations,
+    ToolDeclaration,
 };
 pub use skill_scope::SkillScope;
 

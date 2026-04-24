@@ -976,4 +976,141 @@ next-tools:
             meta.legacy_extension_fields,
         );
     }
+
+    // ── SkillDefaults: defaults merging in sibling tools.yaml ────────
+
+    #[test]
+    fn sibling_tools_yaml_defaults_apply_to_tools() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("defs");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("tools.yaml"),
+            r#"defaults:
+  thread-affinity: main
+  next-tools:
+    on-failure: [dcc_diagnostics__screenshot, dcc_diagnostics__audit_log]
+
+tools:
+  - name: animation
+    group: extended
+  - name: execute_python
+    group: core
+  - name: render
+    execution: async
+    timeout_hint_secs: 300
+    group: rendering
+"#,
+        )
+        .unwrap();
+        let body = r#"---
+name: defs
+metadata:
+  dcc-mcp.dcc: maya
+  dcc-mcp.tools: tools.yaml
+---
+"#;
+        std::fs::write(dir.join(SKILL_METADATA_FILE), body).unwrap();
+        let meta = parse_skill_md(&dir).expect("parsed");
+
+        // All tools should inherit thread-affinity: main
+        assert_eq!(
+            meta.tools[0].thread_affinity,
+            dcc_mcp_models::ThreadAffinity::Main
+        );
+        assert_eq!(
+            meta.tools[1].thread_affinity,
+            dcc_mcp_models::ThreadAffinity::Main
+        );
+        assert_eq!(
+            meta.tools[2].thread_affinity,
+            dcc_mcp_models::ThreadAffinity::Main
+        );
+
+        // All tools should inherit next-tools.on-failure
+        assert_eq!(
+            meta.tools[0].next_tools.on_failure,
+            vec!["dcc_diagnostics__screenshot", "dcc_diagnostics__audit_log"]
+        );
+        assert_eq!(
+            meta.tools[1].next_tools.on_failure,
+            vec!["dcc_diagnostics__screenshot", "dcc_diagnostics__audit_log"]
+        );
+        assert_eq!(
+            meta.tools[2].next_tools.on_failure,
+            vec!["dcc_diagnostics__screenshot", "dcc_diagnostics__audit_log"]
+        );
+
+        // render overrides execution and timeout
+        assert_eq!(
+            meta.tools[2].execution,
+            dcc_mcp_models::ExecutionMode::Async
+        );
+        assert_eq!(meta.tools[2].timeout_hint_secs, Some(300));
+
+        // Others use default execution (Sync)
+        assert_eq!(meta.tools[0].execution, dcc_mcp_models::ExecutionMode::Sync);
+    }
+
+    #[test]
+    fn sibling_tools_yaml_defaults_apply_to_groups() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("gdefs");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("tools.yaml"),
+            r#"defaults:
+  default-active: false
+
+tools:
+  - name: tool_a
+  - name: tool_b
+
+groups:
+  - name: core
+    default-active: true
+    tools: [tool_a]
+  - name: extended
+    tools: [tool_b]
+"#,
+        )
+        .unwrap();
+        let body = r#"---
+name: gdefs
+metadata:
+  dcc-mcp.dcc: maya
+  dcc-mcp.tools: tools.yaml
+---
+"#;
+        std::fs::write(dir.join(SKILL_METADATA_FILE), body).unwrap();
+        let meta = parse_skill_md(&dir).expect("parsed");
+
+        assert_eq!(meta.groups.len(), 2);
+        // core explicitly set default-active: true — must win
+        assert!(meta.groups[0].default_active);
+        // extended inherits default-active: false from defaults
+        assert!(!meta.groups[1].default_active);
+    }
+
+    #[test]
+    fn sibling_tools_yaml_no_defaults_is_backward_compat() {
+        // No defaults: key — existing behavior unchanged
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("nodefs");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("tools.yaml"),
+            "tools:\n  - name: plain\n    description: simple\n",
+        )
+        .unwrap();
+        let body = "---\nname: nodefs\nmetadata:\n  dcc-mcp.tools: tools.yaml\n---\n";
+        std::fs::write(dir.join(SKILL_METADATA_FILE), body).unwrap();
+        let meta = parse_skill_md(&dir).expect("parsed");
+        assert_eq!(meta.tools.len(), 1);
+        assert_eq!(
+            meta.tools[0].thread_affinity,
+            dcc_mcp_models::ThreadAffinity::Any
+        );
+        assert!(meta.tools[0].next_tools.on_failure.is_empty());
+    }
 }
