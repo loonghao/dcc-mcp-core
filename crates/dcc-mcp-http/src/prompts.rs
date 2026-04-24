@@ -37,7 +37,7 @@
 //! arguments raise [`PromptError::MissingArg`] so `prompts/get` can
 //! surface a descriptive JSON-RPC error naming the offending parameter.
 //!
-//! ## Maintainer layout (Batch B, `auto-improve`)
+//! ## Maintainer layout
 //!
 //! This module is a **thin facade** that keeps `PromptRegistry` and
 //! re-exports the public surface. Implementation is split across

@@ -1,7 +1,4 @@
 //! `resources/list`, `resources/read`, `resources/subscribe` message types.
-//!
-//! Extracted from the original monolithic `protocol.rs` as part of
-//! the Batch B thin-facade split (`auto-improve`).
 
 use serde::{Deserialize, Serialize};
 

@@ -1,5 +1,4 @@
-//! The `JobManager` registry. Extracted from the original `job.rs`
-//! as part of the Batch B thin-facade split (`auto-improve`).
+//! The `JobManager` registry.
 //!
 //! See [`crate::job`] for the module-level overview and state diagram.
 

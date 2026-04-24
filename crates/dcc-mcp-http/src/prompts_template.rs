@@ -1,7 +1,4 @@
 //! Minimal `{{name}}` substitution engine for [`crate::prompts`].
-//!
-//! Extracted from the original monolithic `prompts.rs` as part of
-//! the Batch B thin-facade split (`auto-improve`).
 
 use std::collections::HashMap;
 

@@ -1,8 +1,5 @@
 //! MCP lifecycle messages: `initialize`, capabilities, `roots/list`,
 //! `logging/setLevel`, `elicitation/create`.
-//!
-//! Extracted from the original monolithic `protocol.rs` as part of
-//! the Batch B thin-facade split (`auto-improve`).
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

@@ -2,7 +2,7 @@
 //!
 //! Reference: <https://modelcontextprotocol.io/specification/2025-03-26/basic/transports>
 //!
-//! ## Maintainer layout (Batch B, `auto-improve`)
+//! ## Maintainer layout
 //!
 //! This module is a **thin facade** keeping only protocol-level
 //! constants + version negotiation. Every type is split by MCP

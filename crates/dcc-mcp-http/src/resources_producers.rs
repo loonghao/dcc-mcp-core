@@ -1,8 +1,5 @@
 //! Built-in [`ResourceProducer`] implementations: `scene://`,
 //! `capture://`, `audit://`, and `artefact://`.
-//!
-//! Extracted from the original monolithic `resources.rs` as part of
-//! the Batch B thin-facade split (`auto-improve`).
 
 use std::sync::Arc;
 

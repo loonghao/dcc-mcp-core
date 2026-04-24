@@ -1,7 +1,4 @@
 //! JSON-RPC 2.0 envelope + standard error codes.
-//!
-//! Extracted from the original monolithic `protocol.rs` as part of
-//! the Batch B thin-facade split (`auto-improve`).
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

@@ -32,7 +32,7 @@
 //! returns `None` and logs at `debug` level.  The stored job state is left
 //! unchanged.
 //!
-//! ## Maintainer layout (Batch B, `auto-improve`)
+//! ## Maintainer layout
 //!
 //! This module is a **thin facade** that re-exports the public surface.
 //! Implementation is split across sibling files:

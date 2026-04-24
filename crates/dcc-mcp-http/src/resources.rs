@@ -20,7 +20,7 @@
 //! External producers can call [`ResourceRegistry::notify_updated`] to
 //! emit `notifications/resources/updated` for a URI they own.
 //!
-//! ## Maintainer layout (Batch B, `auto-improve`)
+//! ## Maintainer layout
 //!
 //! This module is a **thin facade** that keeps `ResourceRegistry` and
 //! re-exports the public surface. Implementation is split across

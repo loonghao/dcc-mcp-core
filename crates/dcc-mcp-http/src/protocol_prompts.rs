@@ -1,7 +1,4 @@
 //! `prompts/list` + `prompts/get` message types (issues #351, #355).
-//!
-//! Extracted from the original monolithic `protocol.rs` as part of
-//! the Batch B thin-facade split (`auto-improve`).
 
 use serde::{Deserialize, Serialize};
 

@@ -1,7 +1,4 @@
 //! SSE event formatter + cursor pagination helpers.
-//!
-//! Extracted from the original monolithic `protocol.rs` as part of
-//! the Batch B thin-facade split (`auto-improve`).
 
 use serde::Serialize;
 

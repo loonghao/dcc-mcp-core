@@ -1,7 +1,4 @@
 //! YAML spec types parsed from a skill's sibling `prompts.yaml`.
-//!
-//! Extracted from the original monolithic `prompts.rs` as part of
-//! the Batch B thin-facade split (`auto-improve`).
 
 use serde::{Deserialize, Serialize};
 

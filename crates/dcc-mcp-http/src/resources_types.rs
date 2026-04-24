@@ -1,7 +1,4 @@
 //! Trait + value types shared by [`crate::resources`] producers.
-//!
-//! Extracted from the original monolithic `resources.rs` as part of
-//! the Batch B thin-facade split (`auto-improve`).
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;

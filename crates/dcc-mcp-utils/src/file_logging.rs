@@ -32,7 +32,7 @@
 //! `WorkerGuard` that **must** outlive the process — we park it in a
 //! `OnceLock` alongside the optional midnight-ticker handle.
 //!
-//! ## Maintainer layout (Batch B, issue-split #auto-improve)
+//! ## Maintainer layout
 //!
 //! This module is a **thin facade**. Responsibilities are divided
 //! across sibling files, each under ~300 lines:

@@ -2,8 +2,6 @@
 //!
 //! Carries `JobStatus`, `JobProgress`, `Job`, and the `JobEvent` /
 //! `JobSubscriber` transport types used by the notification layer.
-//! Extracted from the original `job.rs` as part of the Batch B
-//! thin-facade split (`auto-improve`).
 
 use std::sync::Arc;
 
