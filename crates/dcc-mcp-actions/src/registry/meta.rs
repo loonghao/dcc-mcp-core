@@ -1,6 +1,3 @@
-#[cfg(feature = "python-bindings")]
-use pyo3::prelude::*;
-
 use dcc_mcp_models::{ExecutionMode, NextTools, ThreadAffinity, ToolAnnotations};
 use serde::{Deserialize, Serialize};
 

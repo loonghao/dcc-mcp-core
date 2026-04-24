@@ -121,6 +121,7 @@ dcc-mcp-server ← dcc-mcp-http
 
 **Maintainer layout**:
 - `registry/mod.rs` keeps the core registry behavior, while `ActionMeta` and the Python binding shim live in focused sibling modules.
+- `chain.rs` is a thin facade: step/result types, placeholder interpolation, the `ActionChain` fluent builder and executor, and unit tests each live in dedicated sibling modules (`chain_types.rs`, `chain_interpolate.rs`, `chain_exec.rs`, `chain_tests.rs`).
 - This separates Rust-side lookup/update semantics from PyO3 translation code and makes metadata evolution easier to review.
 
 ### dcc-mcp-skills
@@ -142,6 +143,7 @@ dcc-mcp-server ← dcc-mcp-http
 - `catalog/catalog.rs` now focuses on query/read APIs, while discovery/bootstrap and load/unload lifecycle paths live in dedicated implementation files.
 - `loader/mod.rs` stays centered on single-skill `SKILL.md` parsing, while batch scan/load orchestration and filesystem enumeration helpers live in sibling modules.
 - `validator.rs` is a thin facade now; report types, validation rules, Python bindings, and unit tests each live in focused siblings.
+- `watcher.rs` is a thin facade around the `SkillWatcher` public surface; shared `WatcherInner` state and the `WatcherError` type live in `watcher_inner.rs`, the `should_reload` / `is_skill_related` FS filters live in `watcher_filter.rs`, the PyO3 wrapper lives in `watcher_python.rs`, and unit tests live in `watcher_tests.rs`.
 - This keeps search/ranking work separate from registry mutation and script-handler registration, which lowers the cognitive load for future refactors.
 
 ### dcc-mcp-protocols

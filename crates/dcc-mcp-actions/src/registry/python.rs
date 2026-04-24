@@ -1,4 +1,5 @@
 use super::*;
+use dcc_mcp_models::{ExecutionMode, NextTools, ThreadAffinity, ToolAnnotations};
 
 #[pymethods]
 impl ActionRegistry {

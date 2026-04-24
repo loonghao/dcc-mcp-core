@@ -2,9 +2,7 @@
 use pyo3::prelude::*;
 
 #[cfg(feature = "python-bindings")]
-use super::{
-    IssueCategory, IssueSeverity, SkillValidationIssue, SkillValidationReport, validate_skill_dir,
-};
+use super::{IssueSeverity, SkillValidationIssue, SkillValidationReport, validate_skill_dir};
 
 #[cfg(feature = "python-bindings")]
 use std::path::Path;
