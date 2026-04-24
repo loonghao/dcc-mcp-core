@@ -17,8 +17,7 @@ use dcc_mcp_utils::filesystem::path_to_string;
 use std::path::Path;
 
 /// Namespace prefix for agentskills.io-compliant dcc-mcp-core metadata keys
-/// (issue #356). Keys under `metadata.dcc-mcp.*` take priority over the
-/// legacy top-level form.
+/// (issue #356). Keys under `metadata.dcc-mcp.*` are the canonical form.
 const DCC_MCP_PREFIX: &str = "dcc-mcp.";
 
 use crate::resolver::{self, ResolveError};
@@ -47,8 +46,8 @@ pub fn parse_skill_md(skill_dir: &Path) -> Option<SkillMetadata> {
     let frontmatter = extract_frontmatter(&content)?;
 
     // Parse once into a raw YAML value so we can inspect which top-level
-    // keys the author declared; this drives the legacy/spec-compliant
-    // detection in issue #356 without breaking the existing deserializer.
+    // keys the author declared; this drives the spec-compliant detection
+    // in issue #356.
     let raw_value: serde_yaml_ng::Value = match serde_yaml_ng::from_str(frontmatter) {
         Ok(v) => v,
         Err(e) => {
@@ -112,10 +111,8 @@ pub fn parse_skill_md(skill_dir: &Path) -> Option<SkillMetadata> {
 
 /// Apply `metadata.dcc-mcp.*` overrides onto `meta`.
 ///
-/// Priority: a value present under `metadata.dcc-mcp.<field>` wins over
-/// the legacy top-level form.  Missing keys leave the existing value
-/// untouched so the legacy path remains functional.  Sibling-file
-/// references for `tools` / `groups` are resolved relative to
+/// A value present under `metadata.dcc-mcp.<field>` takes precedence.
+/// Sibling-file references for `tools` / `groups` are resolved relative to
 /// `skill_dir`.
 fn apply_dcc_mcp_metadata_overrides(
     skill_dir: &Path,
@@ -223,8 +220,7 @@ fn collect_dcc_mcp_overrides(raw: &serde_yaml_ng::Value) -> Vec<(String, serde_y
     };
     for (k, v) in meta_map.iter() {
         let Some(ks) = k.as_str() else { continue };
-        // Flat form: `metadata: { "dcc-mcp.dcc": "maya", ... }` — pre-0.15
-        // shorthand preserved for back-compat.
+        // Flat form: `metadata: { "dcc-mcp.dcc": "maya", ... }`
         if let Some(rest) = ks.strip_prefix(DCC_MCP_PREFIX) {
             out.push((rest.to_string(), v.clone()));
             continue;

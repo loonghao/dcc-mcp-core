@@ -74,37 +74,6 @@ pub fn make_router_with_skill() -> axum::Router {
 }
 
 #[tokio::test]
-pub async fn test_find_skills_returns_discovered_skills() {
-    let server = TestServer::new(make_router_with_skill());
-
-    let resp = server
-        .post("/mcp")
-        .add_header(
-            axum::http::header::ACCEPT,
-            "application/json".parse::<HeaderValue>().unwrap(),
-        )
-        .json(&json!({
-            "jsonrpc": "2.0",
-            "id": 10,
-            "method": "tools/call",
-            "params": {
-                "name": "find_skills",
-                "arguments": {"query": "bevel"}
-            }
-        }))
-        .await;
-
-    resp.assert_status_ok();
-    let body: Value = resp.json();
-    assert_eq!(body["result"]["isError"], false);
-    let content_text = body["result"]["content"][0]["text"].as_str().unwrap();
-    let result: Value = serde_json::from_str(content_text).unwrap();
-    assert_eq!(result["total"], 1);
-    assert_eq!(result["skills"][0]["name"], "modeling-bevel");
-    assert_eq!(result["skills"][0]["loaded"], false);
-}
-
-#[tokio::test]
 pub async fn test_list_skills_shows_all() {
     let server = TestServer::new(make_router_with_skill());
 
@@ -206,9 +175,9 @@ pub async fn test_load_skill_registers_tools() {
 
     let body2: Value = resp2.json();
     let tools = body2["result"]["tools"].as_array().unwrap();
-    // 12 core meta-tools (incl. jobs.get_status #319 + jobs.cleanup #328)
-    // + 2 skill tools = 14
-    assert_eq!(tools.len(), 14);
+    // 11 core meta-tools (incl. jobs.get_status #319 + jobs.cleanup #328)
+    // + 2 skill tools = 13
+    assert_eq!(tools.len(), 13);
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     // #307: bare names when unique within the instance.
     assert!(names.contains(&"bevel"));
@@ -288,9 +257,9 @@ pub async fn test_unload_skill_removes_tools() {
 
     let body2: Value = resp2.json();
     let tools = body2["result"]["tools"].as_array().unwrap();
-    // Back to 12 core meta-tools (incl. jobs.get_status #319 + jobs.cleanup
-    // #328) + 1 unloaded skill stub = 13
-    assert_eq!(tools.len(), 13);
+    // Back to 11 core meta-tools (incl. jobs.get_status #319 + jobs.cleanup
+    // #328) + 1 unloaded skill stub = 12
+    assert_eq!(tools.len(), 12);
     let stub = tools
         .iter()
         .find(|t| t["name"] == "__skill__modeling-bevel")

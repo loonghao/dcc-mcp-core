@@ -17,8 +17,6 @@ pub enum IssueSeverity {
     Error,
     /// Warning — the skill loads but violates a best-practice or spec recommendation.
     Warning,
-    /// Info — purely informational, e.g. deprecation notices.
-    Info,
 }
 
 /// Category of a validation issue.
@@ -64,14 +62,6 @@ impl SkillValidationIssue {
             message: message.into(),
         }
     }
-
-    fn info(category: IssueCategory, message: impl Into<String>) -> Self {
-        Self {
-            severity: IssueSeverity::Info,
-            category,
-            message: message.into(),
-        }
-    }
 }
 
 /// Complete validation report for a skill directory.
@@ -95,18 +85,16 @@ impl SkillValidationReport {
     }
 
     /// Count issues by severity.
-    pub fn counts(&self) -> (usize, usize, usize) {
+    pub fn counts(&self) -> (usize, usize) {
         let mut errors = 0;
         let mut warnings = 0;
-        let mut infos = 0;
         for i in &self.issues {
             match i.severity {
                 IssueSeverity::Error => errors += 1,
                 IssueSeverity::Warning => warnings += 1,
-                IssueSeverity::Info => infos += 1,
             }
         }
-        (errors, warnings, infos)
+        (errors, warnings)
     }
 }
 
@@ -119,7 +107,7 @@ impl SkillValidationReport {
 /// 4. Declared script files exist in `scripts/`.
 /// 5. Declared sidecar files (tools, groups, prompts) exist.
 /// 6. Dependency declarations are consistent.
-/// 7. No legacy extension fields are present (info-level deprecation notice).
+/// 7. No legacy extension fields are present (error — no longer supported).
 pub fn validate_skill_dir(skill_dir: &Path) -> SkillValidationReport {
     let mut report = SkillValidationReport {
         skill_dir: skill_dir.to_path_buf(),
@@ -197,13 +185,13 @@ pub fn validate_skill_dir(skill_dir: &Path) -> SkillValidationReport {
     // 8. Dependency consistency
     validate_dependencies(skill_dir, &meta, &mut report);
 
-    // 9. Legacy extension fields (info)
+    // 9. Legacy extension fields (error — no longer supported)
     let legacy = detect_legacy_fields(&raw_value);
     if !legacy.is_empty() {
-        report.issues.push(SkillValidationIssue::info(
+        report.issues.push(SkillValidationIssue::error(
             IssueCategory::Frontmatter,
             format!(
-                "Legacy top-level extension field(s) detected: {:?}. \
+                "Legacy top-level extension field(s) no longer supported: {:?}. \
                  Use metadata.dcc-mcp.* form instead (see migration guide).",
                 legacy
             ),
@@ -685,7 +673,6 @@ mod python {
                 severity: match i.severity {
                     IssueSeverity::Error => "error".to_string(),
                     IssueSeverity::Warning => "warning".to_string(),
-                    IssueSeverity::Info => "info".to_string(),
                 },
                 category: format!("{:?}", i.category).to_lowercase(),
                 message: i.message,
@@ -841,7 +828,7 @@ mod tests {
     }
 
     #[test]
-    fn test_legacy_fields_info() {
+    fn test_legacy_fields_error() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = make_skill_dir(
             &tmp,
@@ -853,7 +840,7 @@ mod tests {
             report
                 .issues
                 .iter()
-                .any(|i| { i.severity == IssueSeverity::Info && i.message.contains("Legacy") })
+                .any(|i| { i.severity == IssueSeverity::Error && i.message.contains("Legacy") })
         );
     }
 

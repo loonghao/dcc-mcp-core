@@ -37,7 +37,6 @@ pub async fn test_tools_list_no_full_schemas_before_load() {
         let is_core = matches!(
             name,
             "list_roots"
-                | "find_skills"
                 | "list_skills"
                 | "get_skill_info"
                 | "load_skill"
@@ -203,8 +202,8 @@ pub async fn test_load_skill_then_tools_list_has_real_tools_not_stub() {
 #[tokio::test]
 pub async fn test_on_demand_count_invariant() {
     // Invariant: tools/list tool count = N_core + N_loaded_skill_tools + N_stubs
-    // Before any load: count = 6 core + 0 loaded + 2 stubs = 8
-    // After loading maya-bevel (2 tools): = 6 core + 2 loaded + 1 remaining stub = 9
+    // Before any load: count = 5 core + 0 loaded + 2 stubs = 7
+    // After loading maya-bevel (2 tools): = 5 core + 2 loaded + 1 remaining stub = 8
     let server = TestServer::new(make_router_with_skills());
 
     let count_before = {

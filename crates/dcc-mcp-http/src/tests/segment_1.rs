@@ -399,13 +399,12 @@ async fn test_tools_list() {
     resp.assert_status_ok();
     let body: Value = resp.json();
     let tools = body["result"]["tools"].as_array().unwrap();
-    // 12 core meta-tools (10 + jobs.get_status #319 + jobs.cleanup #328)
-    // + 2 registered actions = 14
-    assert_eq!(tools.len(), 14);
+    // 11 core meta-tools (9 + jobs.get_status #319 + jobs.cleanup #328)
+    // + 2 registered actions = 13
+    assert_eq!(tools.len(), 13);
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"get_scene_info"));
     assert!(names.contains(&"list_objects"));
-    assert!(names.contains(&"find_skills"));
     assert!(names.contains(&"load_skill"));
     assert!(names.contains(&"search_skills"));
     assert!(names.contains(&"activate_tool_group"));

@@ -1598,39 +1598,6 @@ class SkillCatalog:
 
         """
         ...
-    def find_skills(
-        self,
-        query: str | None = None,
-        tags: list[str] | None = None,
-        dcc: str | None = None,
-    ) -> list[SkillSummary]:
-        """Search the catalog by keyword, tags, or DCC.
-
-        The ``tags`` and ``dcc`` filters are applied first (AND semantics).
-        Remaining skills are then ranked with a tokenised BM25-lite scorer
-        when ``query`` is non-empty, weighting matches across name / tags /
-        search_hint / description / sibling ``tools.yaml`` entries / dcc.
-        An exact (case-insensitive) match on skill name always ranks first.
-
-        When ``query`` is ``None`` or empty, results are returned in a
-        deterministic order (scope descending, then alphabetical name).
-
-        Deprecated (issue #340) — use :meth:`search_skills`, which accepts a
-        superset of filters (``scope``, ``limit``) and treats the empty call
-        as a discovery request. Kept as a compat shim until v0.17.
-
-        Args:
-            query: Keyword search — tokenised on whitespace/punctuation,
-                   stopwords dropped, no stemming or fuzzy match.
-            tags:  Return only skills that have ALL of the given tags.
-            dcc:   Return only skills targeting this DCC.
-
-        Returns:
-            List of :class:`SkillSummary` matching all supplied filters,
-            sorted by relevance descending.
-
-        """
-        ...
     def search_skills(
         self,
         query: str | None = None,
@@ -1639,7 +1606,7 @@ class SkillCatalog:
         scope: str | None = None,
         limit: int | None = None,
     ) -> list[SkillSummary]:
-        """Unified skill discovery (issue #340) — superset of :meth:`find_skills`.
+        """Unified skill discovery (issue #340).
 
         Args:
             query: Case-insensitive substring match on name, description,
@@ -4321,17 +4288,6 @@ class McpHttpServer:
         Raises:
             ValueError: If the skill is not loaded.
 
-        """
-        ...
-    def find_skills(
-        self,
-        query: str | None = None,
-        tags: list[str] | None = None,
-        dcc: str | None = None,
-    ) -> list[SkillSummary]:
-        """Search for skills matching the given criteria.
-
-        Returns a list of skill summary dicts.
         """
         ...
     def list_skills(self, status: str | None = None) -> list[SkillSummary]:

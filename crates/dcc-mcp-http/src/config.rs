@@ -457,11 +457,8 @@ impl McpHttpConfig {
         self
     }
 
-    /// Builder: force the legacy `<skill>.<action>` form even when bare
+    /// Builder: force the `<skill>.<action>` form even when bare
     /// names would be unique (#307).
-    ///
-    /// Useful for downstream clients that hard-coded the prefixed shape and
-    /// cannot be updated in lock-step with the server.
     pub fn without_bare_tool_names(mut self) -> Self {
         self.bare_tool_names = false;
         self

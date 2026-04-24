@@ -11,10 +11,7 @@
 //! When enabled via [`crate::McpHttpConfig::bare_tool_names`] (default `true`),
 //! the server publishes tools under their **bare action name** whenever no
 //! other skill on the same instance registers the same bare name. Collisions
-//! fall back to `<skill>.<action>` and log a one-shot warning. This cuts the
-//! `tools/list` token footprint by ~40% on Maya-sized skill sets without
-//! breaking routing — [`handle_tools_call`](crate::handler) accepts both forms
-//! for one release cycle (same policy as SEP-986 #258/#261).
+//! fall back to `<skill>.<action>`.
 //!
 //! ## Gateway: `<id8>.<tool>` instance prefix (#261)
 //!
@@ -25,15 +22,6 @@
 //! restricts MCP tool names to `[A-Za-z0-9_.-]`, 1–128 chars — `/` is **not**
 //! legal. Major LLM clients (Anthropic, OpenAI, Cursor) apply even stricter
 //! regexes and will reject names containing `/` outright.
-//!
-//! Decoder accepts three historical encodings for one-version backward
-//! compatibility (each with a `tracing::warn!` on the legacy forms):
-//!
-//! | Form | Status |
-//! |------|--------|
-//! | `{id8}.{tool}` | **Preferred** — current emitter |
-//! | `{id8}/{tool}` | Deprecated — previous unreleased build, decoded + warned |
-//! | `{id8}__{tool}` | Legacy — pre-#258, decoded + warned |
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, OnceLock};
@@ -44,7 +32,6 @@ pub const GATEWAY_LOCAL_TOOLS: &[&str] = &[
     "get_dcc_instance",
     "connect_to_dcc",
     "list_skills",
-    "find_skills",
     "search_skills",
     "get_skill_info",
     "load_skill",
@@ -53,7 +40,6 @@ pub const GATEWAY_LOCAL_TOOLS: &[&str] = &[
 
 /// Core per-DCC tools that keep bare names (no skill prefix).
 pub const CORE_TOOL_NAMES: &[&str] = &[
-    "find_skills",
     "list_skills",
     "get_skill_info",
     "load_skill",
@@ -68,11 +54,6 @@ pub const ID_PREFIX_LEN: usize = 8;
 
 /// Current, SEP-986-compliant gateway instance separator.
 pub const INSTANCE_SEP: &str = ".";
-/// Deprecated separator from an unreleased build — still decoded for
-/// one-version backward compat, never emitted.
-pub const DEPRECATED_SLASH_SEP: &str = "/";
-/// Legacy pre-#258 separator — still decoded for backward compat.
-pub const LEGACY_NAMESPACE_SEP: &str = "__";
 /// Skill→tool separator (unchanged; already SEP-986-compliant).
 pub const SKILL_TOOL_SEP: &str = ".";
 
@@ -295,75 +276,24 @@ fn warn_bare_collision_once(bare: &str, skills: &[&str]) {
     }
 }
 
-static LEGACY_PREFIXED_WARNED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
-
-fn warned_prefixed_slot() -> &'static Mutex<HashSet<String>> {
-    LEGACY_PREFIXED_WARNED.get_or_init(|| Mutex::new(HashSet::new()))
-}
-
-/// Emit a one-shot deprecation warning when a client calls a tool using the
-/// legacy `<skill>.<action>` form that could also have been reached via its
-/// bare name.
-///
-/// Used by `handle_tools_call` so operators learn which integrations still
-/// hard-code the prefixed form without drowning production logs when a
-/// dashboard retries the same tool every few seconds.
-pub fn warn_legacy_prefixed_once(prefixed: &str) {
-    let Ok(mut slot) = warned_prefixed_slot().lock() else {
-        return;
-    };
-    if slot.insert(prefixed.to_string()) {
-        tracing::warn!(
-            tool = prefixed,
-            "legacy `<skill>.<action>` tool name accepted — prefer the bare name; \
-             the prefix fallback will be removed in one release"
-        );
-    }
-}
-
 #[cfg(test)]
 #[doc(hidden)]
 pub fn __reset_warn_state_for_tests() {
     if let Ok(mut s) = warned_bare_slot().lock() {
         s.clear();
     }
-    if let Ok(mut s) = warned_prefixed_slot().lock() {
-        s.clear();
-    }
 }
 
 /// Decode a gateway-encoded tool name into `(id8, original)`.
 ///
-/// Accepts the current `.` separator plus two deprecated encodings for
-/// backward compat (`/` and `__`); both emit a `tracing::warn!` so operators
-/// notice leftover clients.
+/// Only the current `.` separator is accepted.
 pub fn decode_tool_name(prefixed: &str) -> Option<(&str, &str)> {
     if is_local_tool(prefixed) {
         return None;
     }
-    // 1. Preferred: `{id8}.{tool}`.
+    // `{id8}.{tool}` — the only accepted form.
     if let Some((p, r)) = prefixed.split_once(INSTANCE_SEP) {
         if is_instance_prefix(p) {
-            return Some((p, r));
-        }
-    }
-    // 2. Deprecated: `{id8}/{tool}` — the unreleased format fixed in #261.
-    if let Some((p, r)) = prefixed.split_once(DEPRECATED_SLASH_SEP) {
-        if is_instance_prefix(p) {
-            tracing::warn!(
-                tool = prefixed,
-                "Deprecated `/` gateway separator (pre-#261). Use `{{id8}}.{{tool}}`."
-            );
-            return Some((p, r));
-        }
-    }
-    // 3. Legacy: `{id8}__{tool}` — pre-#258.
-    if let Some((p, r)) = prefixed.split_once(LEGACY_NAMESPACE_SEP) {
-        if is_instance_prefix(p) {
-            tracing::warn!(
-                tool = prefixed,
-                "Deprecated `__` gateway separator (pre-#258). Use `{{id8}}.{{tool}}`."
-            );
             return Some((p, r));
         }
     }
@@ -432,20 +362,6 @@ mod tests {
         let (p, n) = decode_tool_name("abcdef01.create_sphere").unwrap();
         assert_eq!(p, "abcdef01");
         assert_eq!(n, "create_sphere");
-    }
-
-    #[test]
-    fn decode_accepts_deprecated_slash_form() {
-        let (p, n) = decode_tool_name("abcdef01/create_sphere").unwrap();
-        assert_eq!(p, "abcdef01");
-        assert_eq!(n, "create_sphere");
-    }
-
-    #[test]
-    fn decode_accepts_legacy_double_underscore_form() {
-        let (p, n) = decode_tool_name("abcdef01__maya_geometry__create_sphere").unwrap();
-        assert_eq!(p, "abcdef01");
-        assert_eq!(n, "maya_geometry__create_sphere");
     }
 
     #[test]
@@ -633,16 +549,5 @@ mod tests {
             action_name: "standalone_action",
         }];
         assert!(resolve_bare_names(&inputs).is_empty());
-    }
-
-    #[test]
-    fn warn_legacy_prefixed_once_is_one_shot_per_name() {
-        __reset_warn_state_for_tests();
-        // Two calls with the same name should not panic or repeatedly warn;
-        // we can only verify the API surface is idempotent here — actual
-        // log output is observed via `cargo test --nocapture` if needed.
-        warn_legacy_prefixed_once("maya-anim.set_keyframe");
-        warn_legacy_prefixed_once("maya-anim.set_keyframe");
-        warn_legacy_prefixed_once("maya-geo.create_sphere");
     }
 }

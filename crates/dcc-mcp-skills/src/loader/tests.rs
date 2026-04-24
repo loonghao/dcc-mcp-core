@@ -648,7 +648,7 @@ metadata:
     }
 
     #[test]
-    fn new_form_overrides_legacy_when_both_present() {
+    fn metadata_dcc_mcp_overrides_top_level() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path().join("both");
         let body = r#"---
@@ -748,38 +748,6 @@ metadata:
             vec!["maya".to_string(), "houdini".to_string()]
         );
         assert_eq!(policy.allow_implicit_invocation, Some(false));
-    }
-
-    #[test]
-    fn both_forms_produce_same_values() {
-        let tmp = tempfile::tempdir().unwrap();
-
-        let legacy_dir = tmp.path().join("legacy");
-        write_skill(
-            &legacy_dir,
-            "---\nname: same\ndcc: maya\nversion: \"1.2.3\"\ntags: [x, y]\nsearch-hint: hello\n---\n",
-        );
-        let legacy = parse_skill_md(&legacy_dir).expect("parsed");
-
-        let new_dir = tmp.path().join("new");
-        write_skill(
-            &new_dir,
-            r#"---
-name: same
-metadata:
-  dcc-mcp.dcc: maya
-  dcc-mcp.version: "1.2.3"
-  dcc-mcp.tags: "x, y"
-  dcc-mcp.search-hint: hello
----
-"#,
-        );
-        let newf = parse_skill_md(&new_dir).expect("parsed");
-
-        assert_eq!(legacy.dcc, newf.dcc);
-        assert_eq!(legacy.version, newf.version);
-        assert_eq!(legacy.tags, newf.tags);
-        assert_eq!(legacy.search_hint, newf.search_hint);
     }
 
     // ── Issue #344 — ToolAnnotations from sibling tools.yaml ──────────

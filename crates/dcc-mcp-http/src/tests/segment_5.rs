@@ -36,9 +36,9 @@ use super::*;
 
     let body2: Value = resp2.json();
     let tools = body2["result"]["tools"].as_array().unwrap();
-    // Back to 12 core meta-tools (incl. jobs.get_status #319 + jobs.cleanup
-    // #328) + 1 unloaded skill stub = 13
-    assert_eq!(tools.len(), 13);
+    // Back to 11 core meta-tools (incl. jobs.get_status #319 + jobs.cleanup
+    // #328) + 1 unloaded skill stub = 12
+    assert_eq!(tools.len(), 12);
     let stub = tools
         .iter()
         .find(|t| t["name"] == "__skill__modeling-bevel")
@@ -95,7 +95,6 @@ async fn test_core_tools_keep_bare_names() {
     let tools = body["result"]["tools"].as_array().unwrap();
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     for core in &[
-        "find_skills",
         "list_skills",
         "get_skill_info",
         "load_skill",

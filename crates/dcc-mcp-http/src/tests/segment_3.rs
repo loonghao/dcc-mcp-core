@@ -49,42 +49,6 @@ async fn test_search_skills_scope_filter_rejects_invalid_scope() {
 }
 
 #[tokio::test]
-async fn test_find_skills_forwards_and_marks_deprecated() {
-    // Issue #340: find_skills is now a compatibility alias. It must still
-    // return valid results AND attach `_meta["dcc.deprecation"]`.
-    let server = TestServer::new(make_router_with_skills());
-
-    let resp = server
-        .post("/mcp")
-        .add_header(
-            axum::http::header::ACCEPT,
-            "application/json".parse::<HeaderValue>().unwrap(),
-        )
-        .json(&json!({
-            "jsonrpc": "2.0",
-            "id": 142,
-            "method": "tools/call",
-            "params": {
-                "name": "find_skills",
-                "arguments": {"query": "bevel"}
-            }
-        }))
-        .await;
-
-    resp.assert_status_ok();
-    let body: Value = resp.json();
-    assert_eq!(body["result"]["isError"], false);
-    let text = body["result"]["content"][0]["text"].as_str().unwrap();
-    assert!(text.contains("maya-bevel"), "forwarded result: {text}");
-    assert_eq!(
-        body["result"]["_meta"]["dcc.deprecation"]
-            .as_str()
-            .unwrap_or(""),
-        "find_skills is deprecated — use search_skills. Will be removed in v0.17."
-    );
-}
-
-#[tokio::test]
 async fn test_tools_list_includes_unloaded_skill_stubs() {
     let server = TestServer::new(make_router_with_skills());
 
@@ -155,7 +119,6 @@ async fn test_tools_list_no_full_schemas_before_load() {
         let is_core = matches!(
             name,
             "list_roots"
-                | "find_skills"
                 | "list_skills"
                 | "get_skill_info"
                 | "load_skill"
@@ -321,8 +284,8 @@ async fn test_load_skill_then_tools_list_has_real_tools_not_stub() {
 #[tokio::test]
 async fn test_on_demand_count_invariant() {
     // Invariant: tools/list tool count = N_core + N_loaded_skill_tools + N_stubs
-    // Before any load: count = 6 core + 0 loaded + 2 stubs = 8
-    // After loading maya-bevel (2 tools): = 6 core + 2 loaded + 1 remaining stub = 9
+    // Before any load: count = 5 core + 0 loaded + 2 stubs = 7
+    // After loading maya-bevel (2 tools): = 5 core + 2 loaded + 1 remaining stub = 8
     let server = TestServer::new(make_router_with_skills());
 
     let count_before = {

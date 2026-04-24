@@ -64,7 +64,6 @@ pub async fn handle_tools_call_inner(
     // Route core discovery tools
     match tool_name.as_str() {
         "list_roots" => return handle_list_roots(state, req, session_id).await,
-        "find_skills" => return handle_find_skills(state, req, &params).await,
         "list_skills" => return handle_list_skills(state, req, &params).await,
         "get_skill_info" => return handle_get_skill_info(state, req, &params).await,
         "load_skill" => return handle_load_skill(state, req, &params, session_id).await,
@@ -134,27 +133,9 @@ pub async fn handle_tools_call_inner(
 
     // Tool name resolution (#238 + #307):
     //   1. Exact registry hit (canonical `skill__action` form).
-    //   2. `<skill>.<action>` shape — the legacy prefixed form. Accepted for
-    //      one release even when `bare_tool_names` is on; emits a one-shot
-    //      warning so operators find remaining hard-coded clients.
-    //   3. Bare action name — the preferred #307 form when unique, or
-    //      legacy fallback when the client predates #238.
+    //   2. Bare action name — the preferred #307 form when unique.
     let resolved_name: String = if state.registry.get_action(&tool_name, None).is_some() {
         tool_name.clone()
-    } else if let Some((skill_part, bare_tool)) = decode_skill_tool_name(&tool_name) {
-        let matched = state
-            .registry
-            .list_actions_by_skill(skill_part)
-            .into_iter()
-            .find(|m| extract_bare_tool_name(skill_part, &m.name) == bare_tool);
-        if let Some(m) = matched {
-            if state.bare_tool_names {
-                crate::gateway::namespace::warn_legacy_prefixed_once(&tool_name);
-            }
-            m.name
-        } else {
-            tool_name.clone()
-        }
     } else {
         let lm = state.registry.list_actions(None).into_iter().find(|m| {
             m.skill_name
@@ -162,18 +143,8 @@ pub async fn handle_tools_call_inner(
                 .map(|sn| extract_bare_tool_name(sn, &m.name) == tool_name.as_str())
                 .unwrap_or(false)
         });
-        if let Some(ref matched) = lm {
-            // When bare names are the blessed form (#307) this path is the
-            // happy path — stay silent. Only warn when the server was
-            // explicitly told to keep the prefixed form as the primary shape,
-            // which means a bare call is the legacy escape hatch.
-            if !state.bare_tool_names {
-                let canonical =
-                    skill_tool_name(matched.skill_name.as_deref().unwrap_or(""), &matched.name)
-                        .unwrap_or_else(|| matched.name.clone());
-                tracing::warn!(bare_name=%tool_name, "Deprecated bare name -- use {canonical}.");
-            }
-            matched.name.clone()
+        if let Some(matched) = lm {
+            matched.name
         } else {
             tool_name.clone()
         }
