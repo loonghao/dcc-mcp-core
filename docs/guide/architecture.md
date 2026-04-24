@@ -271,6 +271,9 @@ dcc-mcp-server ← dcc-mcp-http
 **Maintainer layout**:
 - `src/tests/gateway.rs` is a shared fixture module; gateway tests are split into focused submodules for REST, MCP methods, batch handling, session headers, subscriptions, runner competition, and pagination.
 - Legacy unreferenced `segment_*` test fragments were removed so the crate test tree mirrors real runtime responsibilities.
+- `src/handlers/tools_call.rs` is now a thin facade; request resolution, async job dispatch, sync execution, and result shaping live in focused helper modules.
+- `src/gateway/handlers.rs` is a routing facade; SSE, REST, MCP batch/request handling, notification forwarding, and instance proxying are split into dedicated files.
+- `src/server.rs` keeps the public server types and startup orchestration, while background tasks, gateway bootstrap, and listener spawn strategies live in dedicated implementation modules.
 
 ### dcc-mcp-server
 
