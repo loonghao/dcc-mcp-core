@@ -275,6 +275,13 @@ from dcc_mcp_core.dcc_api_executor import register_dcc_api_executor
 from dcc_mcp_core.dcc_server import register_diagnostic_handlers
 from dcc_mcp_core.dcc_server import register_diagnostic_mcp_tools
 
+# docs:// MCP resource provider (issue #435)
+from dcc_mcp_core.docs_resources import get_builtin_docs_uris
+from dcc_mcp_core.docs_resources import get_docs_content
+from dcc_mcp_core.docs_resources import register_docs_resource
+from dcc_mcp_core.docs_resources import register_docs_resources_from_dir
+from dcc_mcp_core.docs_resources import register_docs_server
+
 # MCP Elicitation support (issue #407)
 from dcc_mcp_core.elicitation import ElicitationMode
 from dcc_mcp_core.elicitation import ElicitationRequest
@@ -500,10 +507,12 @@ __all__ = [
     "generate_api_key",
     "get_app_skill_paths_from_env",
     "get_bridge_context",
+    "get_builtin_docs_uris",
     "get_bundled_skill_paths",
     "get_bundled_skills_dir",
     "get_config_dir",
     "get_data_dir",
+    "get_docs_content",
     "get_log_dir",
     "get_platform_dir",
     "get_server_instance",
@@ -521,6 +530,9 @@ __all__ = [
     "register_dcc_api_executor",
     "register_diagnostic_handlers",
     "register_diagnostic_mcp_tools",
+    "register_docs_resource",
+    "register_docs_resources_from_dir",
+    "register_docs_server",
     "reset_cancel_token",
     "resolve_dependencies",
     "run_main",
