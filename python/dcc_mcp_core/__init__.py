@@ -266,6 +266,16 @@ from dcc_mcp_core.cancellation import current_cancel_token
 from dcc_mcp_core.cancellation import reset_cancel_token
 from dcc_mcp_core.cancellation import set_cancel_token
 
+# Checkpoint/resume for long-running tool executions (issue #436)
+from dcc_mcp_core.checkpoint import CheckpointStore
+from dcc_mcp_core.checkpoint import checkpoint_every
+from dcc_mcp_core.checkpoint import clear_checkpoint
+from dcc_mcp_core.checkpoint import configure_checkpoint_store
+from dcc_mcp_core.checkpoint import get_checkpoint
+from dcc_mcp_core.checkpoint import list_checkpoints
+from dcc_mcp_core.checkpoint import register_checkpoint_tools
+from dcc_mcp_core.checkpoint import save_checkpoint
+
 # Code orchestration pattern — 2-tool DCC API surface (issue #411)
 from dcc_mcp_core.dcc_api_executor import DccApiCatalog
 from dcc_mcp_core.dcc_api_executor import DccApiExecutor
@@ -274,6 +284,13 @@ from dcc_mcp_core.dcc_api_executor import register_dcc_api_executor
 # Pure-Python DCC server diagnostic helpers (no _core dependency)
 from dcc_mcp_core.dcc_server import register_diagnostic_handlers
 from dcc_mcp_core.dcc_server import register_diagnostic_mcp_tools
+
+# docs:// MCP resource provider (issue #435)
+from dcc_mcp_core.docs_resources import get_builtin_docs_uris
+from dcc_mcp_core.docs_resources import get_docs_content
+from dcc_mcp_core.docs_resources import register_docs_resource
+from dcc_mcp_core.docs_resources import register_docs_resources_from_dir
+from dcc_mcp_core.docs_resources import register_docs_server
 
 # MCP Elicitation support (issue #407)
 from dcc_mcp_core.elicitation import ElicitationMode
@@ -287,8 +304,22 @@ from dcc_mcp_core.elicitation import elicit_url
 from dcc_mcp_core.factory import create_dcc_server
 from dcc_mcp_core.factory import get_server_instance
 from dcc_mcp_core.factory import make_start_stop
+
+# Agent feedback + rationale utilities (issues #433, #434)
+from dcc_mcp_core.feedback import clear_feedback
+from dcc_mcp_core.feedback import extract_rationale
+from dcc_mcp_core.feedback import get_feedback_entries
+from dcc_mcp_core.feedback import make_rationale_meta
+from dcc_mcp_core.feedback import register_feedback_tool
 from dcc_mcp_core.gateway_election import DccGatewayElection
 from dcc_mcp_core.hotreload import DccSkillHotReloader
+
+# Runtime namespace introspection tools (issue #426)
+from dcc_mcp_core.introspect import introspect_eval
+from dcc_mcp_core.introspect import introspect_list_module
+from dcc_mcp_core.introspect import introspect_search
+from dcc_mcp_core.introspect import introspect_signature
+from dcc_mcp_core.introspect import register_introspect_tools
 
 # Plugin manifest generation (issue #410)
 from dcc_mcp_core.plugin_manifest import PluginManifest
@@ -316,6 +347,7 @@ from dcc_mcp_core.skill import get_bundled_skills_dir
 from dcc_mcp_core.skill import run_main
 from dcc_mcp_core.skill import skill_entry
 from dcc_mcp_core.skill import skill_error
+from dcc_mcp_core.skill import skill_error_with_trace
 from dcc_mcp_core.skill import skill_exception
 from dcc_mcp_core.skill import skill_success
 from dcc_mcp_core.skill import skill_warning
@@ -370,6 +402,7 @@ __all__ = [
     "CaptureResult",
     "CaptureTarget",
     "Capturer",
+    "CheckpointStore",
     "CimdDocument",
     "DccApiCatalog",
     "DccApiExecutor",
@@ -490,6 +523,10 @@ __all__ = [
     "batch_dispatch",
     "build_plugin_manifest",
     "check_cancelled",
+    "checkpoint_every",
+    "clear_checkpoint",
+    "clear_feedback",
+    "configure_checkpoint_store",
     "create_dcc_server",
     "create_skill_server",
     "current_cancel_token",
@@ -500,16 +537,21 @@ __all__ = [
     "error_result",
     "expand_transitive_dependencies",
     "export_plugin_manifest",
+    "extract_rationale",
     "flush_logs",
     "from_exception",
     "gc_orphans",
     "generate_api_key",
     "get_app_skill_paths_from_env",
     "get_bridge_context",
+    "get_builtin_docs_uris",
     "get_bundled_skill_paths",
     "get_bundled_skills_dir",
+    "get_checkpoint",
     "get_config_dir",
     "get_data_dir",
+    "get_docs_content",
+    "get_feedback_entries",
     "get_log_dir",
     "get_platform_dir",
     "get_recipe_content",
@@ -520,20 +562,33 @@ __all__ = [
     "get_tools_dir",
     "hmac_sha256_hex",
     "init_file_logging",
+    "introspect_eval",
+    "introspect_list_module",
+    "introspect_search",
+    "introspect_signature",
     "is_telemetry_initialized",
+    "list_checkpoints",
+    "make_rationale_meta",
     "make_start_stop",
     "mpu_to_units",
     "parse_recipe_anchors",
     "parse_schedules_yaml",
     "parse_skill_md",
     "register_bridge",
+    "register_checkpoint_tools",
     "register_dcc_api_executor",
     "register_diagnostic_handlers",
     "register_diagnostic_mcp_tools",
+    "register_docs_resource",
+    "register_docs_resources_from_dir",
+    "register_docs_server",
+    "register_feedback_tool",
+    "register_introspect_tools",
     "register_recipes_tools",
     "reset_cancel_token",
     "resolve_dependencies",
     "run_main",
+    "save_checkpoint",
     "scan_and_load",
     "scan_and_load_lenient",
     "scan_skill_paths",
@@ -544,6 +599,7 @@ __all__ = [
     "shutdown_telemetry",
     "skill_entry",
     "skill_error",
+    "skill_error_with_trace",
     "skill_exception",
     "skill_success",
     "skill_success_with_chart",
