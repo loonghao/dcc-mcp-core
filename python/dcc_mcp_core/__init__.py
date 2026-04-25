@@ -322,6 +322,13 @@ from dcc_mcp_core.skill import skill_exception
 from dcc_mcp_core.skill import skill_success
 from dcc_mcp_core.skill import skill_warning
 
+# YAML declarative workflow definitions (issue #439)
+from dcc_mcp_core.workflow_yaml import WorkflowTask
+from dcc_mcp_core.workflow_yaml import WorkflowYaml
+from dcc_mcp_core.workflow_yaml import get_workflow_path
+from dcc_mcp_core.workflow_yaml import load_workflow_yaml
+from dcc_mcp_core.workflow_yaml import register_workflow_yaml_tools
+
 __version__: str = getattr(_core, "__version__", "0.0.0-dev")
 __author__: str = getattr(_core, "__author__", "unknown")
 
@@ -481,6 +488,8 @@ __all__ = [
     "WorkflowSpec",
     "WorkflowStatus",
     "WorkflowStep",
+    "WorkflowTask",
+    "WorkflowYaml",
     "WorkspaceRoots",
     "__author__",
     "__version__",
@@ -521,9 +530,11 @@ __all__ = [
     "get_skill_paths_from_env",
     "get_skills_dir",
     "get_tools_dir",
+    "get_workflow_path",
     "hmac_sha256_hex",
     "init_file_logging",
     "is_telemetry_initialized",
+    "load_workflow_yaml",
     "make_rationale_meta",
     "make_start_stop",
     "mpu_to_units",
@@ -534,6 +545,7 @@ __all__ = [
     "register_diagnostic_handlers",
     "register_diagnostic_mcp_tools",
     "register_feedback_tool",
+    "register_workflow_yaml_tools",
     "reset_cancel_token",
     "resolve_dependencies",
     "run_main",
