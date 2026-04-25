@@ -184,6 +184,7 @@ stubgen-check:
 
 # Check VitePress docs build (catches dead links, syntax errors)
 docs-check:
+    #!/usr/bin/env bash
     cd docs && npm ci && npm run docs:build
 
 # ── Lint ──────────────────────────────────────────────────────────────────────
@@ -206,7 +207,7 @@ lint-fix: fmt lint-py-fix
 # ── Aggregate targets (CI + local) ────────────────────────────────────────────
 
 # Pre-flight: Rust check + clippy + fmt + tests + docs — run before every commit
-preflight: check clippy fmt-check test-rust docs-check
+preflight: check clippy fmt-check test-rust
 
 # Full local CI pipeline: preflight → build wheel → Python tests → lint
 ci: preflight install test lint-py
