@@ -180,6 +180,12 @@ stubgen:
 stubgen-check:
     cargo run --bin stub_gen --features stub-gen -- --check
 
+# ── Docs ──────────────────────────────────────────────────────────────────────
+
+# Check VitePress docs build (catches dead links, syntax errors)
+docs-check:
+    cd docs && npm ci && npm run docs:build
+
 # ── Lint ──────────────────────────────────────────────────────────────────────
 
 # Lint Python source (ruff check only)
@@ -199,8 +205,8 @@ lint-fix: fmt lint-py-fix
 
 # ── Aggregate targets (CI + local) ────────────────────────────────────────────
 
-# Pre-flight: Rust check + clippy + fmt + tests — run before every commit
-preflight: check clippy fmt-check test-rust
+# Pre-flight: Rust check + clippy + fmt + tests + docs — run before every commit
+preflight: check clippy fmt-check test-rust docs-check
 
 # Full local CI pipeline: preflight → build wheel → Python tests → lint
 ci: preflight install test lint-py
