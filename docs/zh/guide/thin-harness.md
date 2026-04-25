@@ -1,11 +1,11 @@
 # 薄线束 Skill 编写模式
 
-> **[English](../../guide/thin-harness.md)**
+**[English](../../guide/thin-harness.md)**
 
 > **TL;DR** — 当没有 domain skill 覆盖用户的意图时，薄线束 skill
 > 向代理提供一个原始脚本执行器加一本配方书。代理阅读配方，
 > 编写原生 DCC 调用，然后提交 — 无需包装器。
-> 架构原理参见 [ADR 003](../adr/003-thin-harness-skill-pattern.md)。
+> 架构原理参见 [ADR 003](/adr/003-thin-harness-skill-pattern)。
 
 ---
 
@@ -238,7 +238,7 @@ Once the dcc-introspect built-in skill is loaded:
 
 ## 相关
 
-- [ADR 003](../adr/003-thin-harness-skill-pattern.md) — 架构决策
+- [ADR 003](/adr/003-thin-harness-skill-pattern) — 架构决策
 - [skills/templates/thin-harness/](https://github.com/loonghao/dcc-mcp-core/tree/main/skills/templates/thin-harness/) — 起始模板
 - [skills/README.md#skill-layering](https://github.com/loonghao/dcc-mcp-core/blob/main/skills/README.md) — 层级定义
 - Issue #426 — `dcc_introspect__*` 内置工具

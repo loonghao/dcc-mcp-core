@@ -1,6 +1,6 @@
 # Agents 参考 — 详细规则与陷阱
 
-> **[English](../../guide/agents-reference.md)**
+**[English](../../guide/agents-reference.md)**
 
 > 本文件是 `AGENTS.md` 的详细补充。
 > `AGENTS.md` 是导航地图（≤150 行）；本文件包含
