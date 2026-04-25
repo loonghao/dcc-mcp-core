@@ -287,6 +287,13 @@ from dcc_mcp_core.elicitation import elicit_url
 from dcc_mcp_core.factory import create_dcc_server
 from dcc_mcp_core.factory import get_server_instance
 from dcc_mcp_core.factory import make_start_stop
+
+# Agent feedback + rationale utilities (issues #433, #434)
+from dcc_mcp_core.feedback import clear_feedback
+from dcc_mcp_core.feedback import extract_rationale
+from dcc_mcp_core.feedback import get_feedback_entries
+from dcc_mcp_core.feedback import make_rationale_meta
+from dcc_mcp_core.feedback import register_feedback_tool
 from dcc_mcp_core.gateway_election import DccGatewayElection
 from dcc_mcp_core.hotreload import DccSkillHotReloader
 
@@ -484,6 +491,7 @@ __all__ = [
     "batch_dispatch",
     "build_plugin_manifest",
     "check_cancelled",
+    "clear_feedback",
     "create_dcc_server",
     "create_skill_server",
     "current_cancel_token",
@@ -494,6 +502,7 @@ __all__ = [
     "error_result",
     "expand_transitive_dependencies",
     "export_plugin_manifest",
+    "extract_rationale",
     "flush_logs",
     "from_exception",
     "gc_orphans",
@@ -504,6 +513,7 @@ __all__ = [
     "get_bundled_skills_dir",
     "get_config_dir",
     "get_data_dir",
+    "get_feedback_entries",
     "get_log_dir",
     "get_platform_dir",
     "get_server_instance",
@@ -513,6 +523,7 @@ __all__ = [
     "hmac_sha256_hex",
     "init_file_logging",
     "is_telemetry_initialized",
+    "make_rationale_meta",
     "make_start_stop",
     "mpu_to_units",
     "parse_schedules_yaml",
@@ -521,6 +532,7 @@ __all__ = [
     "register_dcc_api_executor",
     "register_diagnostic_handlers",
     "register_diagnostic_mcp_tools",
+    "register_feedback_tool",
     "reset_cancel_token",
     "resolve_dependencies",
     "run_main",
@@ -534,6 +546,7 @@ __all__ = [
     "shutdown_telemetry",
     "skill_entry",
     "skill_error",
+    "skill_error_with_trace",
     "skill_exception",
     "skill_success",
     "skill_success_with_chart",
