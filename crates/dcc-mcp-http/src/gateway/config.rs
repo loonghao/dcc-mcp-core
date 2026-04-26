@@ -22,8 +22,9 @@ pub struct GatewayConfig {
     /// Default: `120` seconds (12 × 10-second retry intervals).
     pub challenger_timeout_secs: u64,
     /// Per-backend request timeout (milliseconds) used for fan-out calls
-    /// from the gateway to each live DCC instance. Default: `10_000`.
-    /// Issue #314.
+    /// from the gateway to each live DCC instance. Default: `120_000`
+    /// (2 minutes). Raised from the legacy 10 s to accommodate DCC scene
+    /// operations (import, bake, render). Issue #314.
     pub backend_timeout_ms: u64,
     /// Longer timeout applied when the outbound `tools/call` is async-
     /// opted-in (issue #321). Default: `60_000`.
@@ -54,7 +55,7 @@ impl Default for GatewayConfig {
             server_version: env!("CARGO_PKG_VERSION").to_string(),
             registry_dir: None,
             challenger_timeout_secs: 120,
-            backend_timeout_ms: 10_000,
+            backend_timeout_ms: 120_000,
             async_dispatch_timeout_ms: 60_000,
             wait_terminal_timeout_ms: 600_000,
             route_ttl_secs: 60 * 60 * 24,

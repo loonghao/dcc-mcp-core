@@ -110,11 +110,15 @@ async fn register_backend(registry: &Arc<RwLock<FileRegistry>>, port: u16) {
 // ── Config plumbing ────────────────────────────────────────────────────────
 
 #[test]
-fn mcp_http_config_default_backend_timeout_is_ten_seconds() {
+fn mcp_http_config_default_backend_timeout_is_two_minutes() {
+    // Default raised from 10 s → 120 s to accommodate DCC scene operations
+    // (mesh import, simulation bake, render) that regularly take tens of
+    // seconds. The old 10-second default caused the gateway to cancel
+    // legitimate tool calls while the backend was still working. Issue #314.
     let cfg = McpHttpConfig::new(8765);
     assert_eq!(
-        cfg.backend_timeout_ms, 10_000,
-        "default backend_timeout_ms must remain 10_000 for backwards compatibility"
+        cfg.backend_timeout_ms, 120_000,
+        "default backend_timeout_ms must be 120_000 (2 minutes) after #314 fix"
     );
 }
 
