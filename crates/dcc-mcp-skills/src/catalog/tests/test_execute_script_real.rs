@@ -10,6 +10,17 @@
 //! ambient `python` on PATH is used. Per-language tests are gated on the
 //! interpreter being resolvable so CI on either OS can run the rest of the
 //! matrix even when one interpreter is missing.
+//!
+//! Tests early-return when the test binary is being ptraced (tarpaulin /
+//! valgrind / strace / a debugger): ptrace interferes with the
+//! `Stdio::piped()` / `wait_with_output()` pattern these tests rely on,
+//! producing spurious failures (subprocesses lose their stdin write or
+//! `wait_with_output` returns early) even though the same tests pass
+//! cleanly under regular `cargo test` on Linux + macOS + Windows. The
+//! dispatcher code paths these tests cover are still exercised — and
+//! counted by coverage — by the smoke tests in `test_execute_script.rs`;
+//! functional verification still runs on every PR via the regular Rust
+//! matrix on all three platforms.
 
 use super::*;
 use std::path::PathBuf;
@@ -17,15 +28,31 @@ use tempfile::TempDir;
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
-/// `true` when running under `cargo tarpaulin`. Tarpaulin instruments the
-/// test binary via ptrace, which historically interferes with the
-/// `Stdio::piped()` / `wait_with_output()` pattern these tests rely on
-/// (see tarpaulin issues #843, #1011 et al.) — the child process either
-/// loses its stdin write or the wait returns prematurely. The non-tarpaulin
-/// `cargo test` runs on Linux, macOS and Windows already exercise this
-/// code path, so we skip rather than chase ptrace artefacts in coverage.
-fn under_tarpaulin() -> bool {
-    std::env::var_os("CARGO_TARPAULIN").is_some() || std::env::var_os("TARPAULIN").is_some()
+/// `true` when the current process is being ptraced (cargo tarpaulin
+/// coverage, valgrind, strace, debugger). Detection only attempts the Linux
+/// `/proc/self/status` `TracerPid` field — the only platform where tarpaulin
+/// runs in CI. On macOS / Windows the function always returns `false`, which
+/// is correct because tarpaulin does not run there. Tarpaulin's ptrace
+/// instrumentation interferes with the `Stdio::piped()` / `wait_with_output()`
+/// pattern these tests rely on, so when ptraced we skip rather than chase
+/// ptrace artefacts in coverage; the non-coverage `cargo test` runs on all
+/// three platforms still exercise the same dispatcher code paths.
+fn under_ptrace() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
+            for line in status.lines() {
+                if let Some(rest) = line.strip_prefix("TracerPid:") {
+                    return rest.trim().parse::<u32>().map(|p| p != 0).unwrap_or(false);
+                }
+            }
+        }
+        false
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
 }
 
 /// `true` when an executable named `program` is resolvable on PATH (with the
@@ -64,12 +91,11 @@ fn write_script(name: &str, body: &str) -> (TempDir, PathBuf) {
 }
 
 /// Combined precondition guard for every test in this module: skip when the
-/// requested interpreter is missing OR when running under tarpaulin coverage
-/// instrumentation (which historically interferes with subprocess Stdio
-/// pipes — see `under_tarpaulin` above). Returns `true` when the test should
-/// be skipped.
+/// requested interpreter is missing OR when the test binary is being ptraced
+/// (which historically interferes with subprocess Stdio pipes — see
+/// `under_ptrace` above). Returns `true` when the test should be skipped.
 fn skip_real_exec(interpreter: &str) -> bool {
-    under_tarpaulin() || !have_program(interpreter)
+    under_ptrace() || !have_program(interpreter)
 }
 
 // ── Python (.py) — stdin / CLI / file processing ───────────────────────────
