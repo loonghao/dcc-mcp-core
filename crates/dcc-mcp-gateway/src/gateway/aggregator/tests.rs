@@ -265,7 +265,7 @@ async fn aggregate_tools_list_does_not_publish_single_instance_bare_aliases() {
         allow_unknown_tools: false,
         adapter_version: None,
         adapter_dcc: None,
-        tool_exposure: crate::gateway::GatewayToolExposure::Full,
+        tool_exposure: crate::gateway::GatewayToolExposure::Rest,
         cursor_safe_tool_names: true,
         capability_index: std::sync::Arc::new(crate::gateway::capability::CapabilityIndex::new()),
     };
@@ -280,10 +280,11 @@ async fn aggregate_tools_list_does_not_publish_single_instance_bare_aliases() {
         .filter_map(|tool| tool["name"].as_str())
         .collect();
 
+    // Backend tools must NOT be fanned out (issue #674).
     let prefix = format!("i_{}__", &instance_id.to_string()[..8]);
     assert!(
-        names.iter().any(|name| name.starts_with(&prefix)),
-        "expected prefixed backend tool in {names:?}"
+        !names.iter().any(|name| name.starts_with(&prefix)),
+        "backend tools must not be fanned out in Rest mode: {names:?}"
     );
     assert!(
         !names.contains(&"create_sphere"),
