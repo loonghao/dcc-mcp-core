@@ -3,31 +3,36 @@ use super::*;
 /// How the gateway publishes backend-provided tools through MCP `tools/list`
 /// (issue #652).
 ///
-/// In multi-instance setups, fan-out of every live backend tool makes the
-/// gateway's visible tool list grow linearly with instance count × skill
-/// count, causing context blow-up on the client side. This enum lets the
-/// operator bound the surface explicitly.
+/// After #674, only two modes remain:
 ///
-/// See the tracking issue [#657] for the REST-backed capability redesign
-/// that `Slim` / `Rest` unlock.
-///
-/// [#657]: https://github.com/loonghao/dcc-mcp-core/issues/657
+/// - [`Self::Rest`] (default) — publish gateway meta-tools + skill-management
+///   tools + backend tools (Tier 1 + 2 + 3). This is the canonical mode that
+///   matches the MCP spec expectation that `tools/list` returns every
+///   callable tool. Cursor-safe `i_<id8>__<name>` names are used for backend
+///   tools so agents can invoke them directly via `tools/call`.
+/// - [`Self::Slim`] — publish only Tier 1 + 2 (gateway meta + skill
+///   management). Backend capabilities are reachable only through
+///   `search_tools` / `describe_tool` / `call_tool` wrappers. Useful when
+///   the client's context budget cannot fit every instance's tools.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GatewayToolExposure {
     /// Emit only gateway meta-tools + skill-management tools (Tier 1 + 2).
     /// Backend capabilities are discovered and invoked through dynamic
     /// `search_tools` / `describe_tool` / `call_tool` wrappers.
     Slim,
-    /// Same bounded surface as [`Self::Slim`]; signals that REST is the
-    /// canonical capability API. This is the default mode.
+    /// Publish Tier 1 + 2 + 3 — gateway meta, skill management, and
+    /// fanned-out backend tools. This is the default mode and matches the
+    /// MCP spec expectation that `tools/list` returns every callable tool.
     Rest,
 }
 
 impl GatewayToolExposure {
-    /// `Slim` and `Rest` never fan out to backend tools.
-    /// Backend capabilities are always accessed via `search_tools` / `call_tool`.
+    /// True when this mode fans out to backend tools in `tools/list`.
+    ///
+    /// `Rest` publishes backend tools (cursor-safe `i_<id8>__<name>` form);
+    /// `Slim` does not.
     pub const fn publishes_backend_tools(self) -> bool {
-        false
+        matches!(self, Self::Rest)
     }
 
     /// Human-readable token matching the documented config vocabulary
@@ -41,8 +46,8 @@ impl GatewayToolExposure {
 }
 
 impl Default for GatewayToolExposure {
-    /// `Rest` is the default — the correct and unique mode.
-    /// `Full` and `Both` have been removed.
+    /// `Rest` is the default — publishes backend tools via cursor-safe names.
+    /// `Full` and `Both` have been removed (#674).
     fn default() -> Self {
         Self::Rest
     }
@@ -265,13 +270,14 @@ mod tests {
     // ── Semantics: publishes_backend_tools ───────────────────────────────
     //
     // This predicate is the single branch point in `aggregate_tools_list`
-    // (#652). The test freezes the expected truth table so nobody can
-    // quietly flip Slim/Rest back into a fan-out mode.
+    // (#652 / #674). The test freezes the expected truth table: after
+    // #674, `Rest` publishes backend tools (replacing the old `Full`
+    // mode's behaviour), while `Slim` keeps the gateway surface bounded.
 
     #[test]
     fn publishes_backend_tools_truth_table_is_stable() {
         assert!(!GatewayToolExposure::Slim.publishes_backend_tools());
-        assert!(!GatewayToolExposure::Rest.publishes_backend_tools());
+        assert!(GatewayToolExposure::Rest.publishes_backend_tools());
     }
 
     #[test]

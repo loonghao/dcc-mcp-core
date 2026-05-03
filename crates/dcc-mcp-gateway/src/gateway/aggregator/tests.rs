@@ -280,11 +280,13 @@ async fn aggregate_tools_list_does_not_publish_single_instance_bare_aliases() {
         .filter_map(|tool| tool["name"].as_str())
         .collect();
 
-    // Backend tools must NOT be fanned out (issue #674).
-    let prefix = format!("i_{}__", &instance_id.to_string()[..8]);
+    // In Rest mode (default), backend tools ARE fanned out under the
+    // cursor-safe `i_<id8>__<name>` form, but bare aliases are not
+    // published (the encoded form is the single canonical identifier).
+    let prefix = format!("i_{}__", &instance_id.to_string().replace('-', "")[..8]);
     assert!(
-        !names.iter().any(|name| name.starts_with(&prefix)),
-        "backend tools must not be fanned out in Rest mode: {names:?}"
+        names.iter().any(|name| name.starts_with(&prefix)),
+        "Rest mode must fan out backend tools with the cursor-safe prefix: {names:?}"
     );
     assert!(
         !names.contains(&"create_sphere"),

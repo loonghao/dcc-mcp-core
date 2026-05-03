@@ -239,9 +239,6 @@ async fn single_instance_bare_alias_is_suppressed_for_unsafe_names() {
 
 /// Plain backend names must also avoid bare aliases; the gateway should
 /// advertise only the instance-prefixed cursor-safe name (#693).
-///
-/// NOTE: After #674, the gateway NO LONGER fans out backend tools.
-/// This test now verifies that NO backend tools appear in `tools/list`.
 #[tokio::test]
 async fn single_instance_bare_alias_is_not_emitted_for_safe_names() {
     let dir = tempfile::tempdir().unwrap();
@@ -252,17 +249,25 @@ async fn single_instance_bare_alias_is_not_emitted_for_safe_names() {
     register_maya_backend(&registry, port).await;
 
     let names = tool_names(&aggregate_tools_list(&state, None).await);
-    // After #674, backend tools are NOT fanned out.
+    // The instance-prefixed cursor-safe name must be present.
     assert!(
-        !names.iter().any(|n| n.contains("create")),
-        "backend tools must not appear in tools/list after #674; got {names:?}",
+        names
+            .iter()
+            .any(|n| n.starts_with("i_") && n.contains("create_U_sphere")),
+        "cursor-safe mode must emit the `i_<id8>__<name>` form; got {names:?}",
+    );
+    // The bare alias `create_sphere` must NOT leak alongside (#693).
+    assert!(
+        !names.iter().any(|n| *n == "create_sphere"),
+        "bare alias must not be emitted alongside the cursor-safe form; got {names:?}",
     );
 }
 
 // ── Opt-out: operators can still pin the SEP-986 dotted form ───────────────
 
-/// The legacy wire form is no longer emitted after #674 (fan-out removed).
-/// This test now verifies that NO backend tools appear in `tools/list`.
+/// When `cursor_safe_tool_names` is disabled, the gateway should emit the
+/// pre-#656 SEP-986 dotted form (`<id8>.<tool>`) instead of the
+/// cursor-safe `i_<id8>__<tool>` form.
 #[tokio::test]
 async fn disabling_cursor_safe_restores_sep986_dotted_form() {
     let dir = tempfile::tempdir().unwrap();
@@ -273,10 +278,17 @@ async fn disabling_cursor_safe_restores_sep986_dotted_form() {
     let _entry = register_maya_backend(&registry, port).await;
 
     let names = tool_names(&aggregate_tools_list(&state, None).await);
-    // After #674, backend tools are NOT fanned out.
+    // With cursor_safe disabled, backend tools appear in `<id8>.<tool>` form.
     assert!(
-        !names.iter().any(|n| n.contains("create")),
-        "backend tools must not appear in tools/list after #674; got {names:?}",
+        names.iter().any(|n| n.contains(".create_sphere")),
+        "disabled cursor-safe must emit SEP-986 dotted form; got {names:?}",
+    );
+    // The cursor-safe `i_<id8>__` form must not be mixed in.
+    assert!(
+        !names
+            .iter()
+            .any(|n| n.starts_with("i_") && n.contains("__")),
+        "disabled cursor-safe must not emit the `i_<id8>__` form; got {names:?}",
     );
 }
 
