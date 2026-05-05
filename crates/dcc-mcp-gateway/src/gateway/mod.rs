@@ -38,6 +38,7 @@ pub mod capability_service;
 pub mod event_log;
 pub mod handlers;
 pub mod namespace;
+pub mod openapi;
 pub mod proxy;
 pub mod router;
 pub mod sse_subscriber;
