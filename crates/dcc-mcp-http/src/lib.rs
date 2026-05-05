@@ -96,7 +96,10 @@ pub mod python;
 
 // Re-exports
 pub use bridge_registry::{BridgeContext, BridgeRegistry};
-pub use config::{McpHttpConfig, ServerSpawnMode};
+pub use config::{
+    FeatureFlags, HttpGatewayConfig, JobRecoveryPolicy, McpHttpConfig, QueueConfig,
+    SchedulerConfig, ServerSpawnMode, SessionConfig, TelemetryConfig, WorkflowConfig,
+};
 pub use dynamic_tools::{DYNAMIC_TOOL_PREFIX, DynamicToolError, SessionDynamicTools, ToolSpec};
 pub use error::{HttpError, HttpResult};
 pub use executor::{DccExecutorHandle, DeferredExecutor, ExecutorQueueStats};
