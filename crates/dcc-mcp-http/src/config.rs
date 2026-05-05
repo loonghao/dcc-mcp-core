@@ -1053,4 +1053,95 @@ mod tests {
         assert_eq!(sess.session_ttl_secs, cfg.session_ttl_secs);
         assert_eq!(sess.job_recovery, cfg.job_recovery);
     }
+
+    /// Issue #764: sub-config view methods reflect custom (non-default) flat values so
+    /// a write-then-read round-trip confirms every field is correctly mapped.
+    #[test]
+    fn sub_config_views_reflect_custom_values() {
+        let cfg = McpHttpConfig::new(9000)
+            .with_gateway(7000)
+            .with_backend_timeout_ms(50_000)
+            .with_gateway_async_dispatch_timeout_ms(30_000)
+            .with_gateway_wait_terminal_timeout_ms(120_000)
+            .with_gateway_route_ttl_secs(3600)
+            .with_gateway_max_routes_per_session(500)
+            .with_gateway_cursor_safe_tool_names(false)
+            .with_deferred_queue_depth(32)
+            .with_bridge_queue_depth(64)
+            .with_host_queue_depth(8)
+            .with_queue_send_timeout_ms(5_000)
+            .with_session_ttl_secs(7200)
+            .with_job_recovery(JobRecoveryPolicy::Requeue);
+
+        // Gateway sub-config
+        let gw = cfg.gateway_config();
+        assert_eq!(gw.port, 7000);
+        assert_eq!(gw.backend_timeout_ms, 50_000);
+        assert_eq!(gw.async_dispatch_timeout_ms, 30_000);
+        assert_eq!(gw.wait_terminal_timeout_ms, 120_000);
+        assert_eq!(gw.route_ttl_secs, 3600);
+        assert_eq!(gw.max_routes_per_session, 500);
+        assert!(!gw.cursor_safe_tool_names);
+
+        // Queue sub-config
+        let q = cfg.queue_config();
+        assert_eq!(q.deferred_queue_depth, 32);
+        assert_eq!(q.bridge_queue_depth, 64);
+        assert_eq!(q.host_queue_depth, 8);
+        assert_eq!(q.send_timeout_ms, 5_000);
+
+        // Session sub-config
+        let sess = cfg.session_config();
+        assert_eq!(sess.session_ttl_secs, 7200);
+        assert_eq!(sess.job_recovery, JobRecoveryPolicy::Requeue);
+    }
+
+    /// Issue #764 / backward-compat: `McpHttpConfig::new(port)` produces sensible
+    /// defaults for every sub-domain so existing callers that only set `port`
+    /// continue to work after the flat-field refactor.
+    #[test]
+    fn new_port_constructor_defaults() {
+        let cfg = McpHttpConfig::new(1234);
+        assert_eq!(cfg.port, 1234);
+        // Network defaults
+        assert_eq!(cfg.host, IpAddr::V4(std::net::Ipv4Addr::LOCALHOST));
+        assert_eq!(cfg.endpoint_path, "/mcp");
+        assert_eq!(cfg.request_timeout_ms, 30_000);
+        assert!(!cfg.enable_cors);
+        assert_eq!(cfg.spawn_mode, ServerSpawnMode::Ambient);
+        // Gateway: disabled by default
+        assert_eq!(cfg.gateway_port, 0);
+        assert_eq!(cfg.stale_timeout_secs, 30);
+        assert_eq!(cfg.heartbeat_secs, 5);
+        assert_eq!(cfg.backend_timeout_ms, 120_000);
+        assert!(cfg.gateway_cursor_safe_tool_names);
+        // Queue: pre-#715 defaults
+        assert_eq!(cfg.deferred_queue_depth, 16);
+        assert_eq!(cfg.bridge_queue_depth, 16);
+        assert_eq!(cfg.host_queue_depth, 0);
+        assert_eq!(cfg.queue_send_timeout_ms, 2_000);
+        // Session defaults
+        assert_eq!(cfg.max_sessions, 100);
+        assert_eq!(cfg.session_ttl_secs, 3_600);
+        assert!(!cfg.shutdown_on_drop);
+        assert_eq!(cfg.job_recovery, JobRecoveryPolicy::Drop);
+        // Feature flags
+        assert!(!cfg.lazy_actions);
+        assert!(cfg.bare_tool_names);
+        assert!(cfg.enable_resources);
+        assert!(cfg.enable_prompts);
+        assert!(!cfg.enable_artefact_resources);
+        assert!(cfg.enable_job_notifications);
+        assert!(cfg.enable_tool_cache);
+    }
+
+    /// Issue #764: `Default::default()` delegates to `new(8765)` so the canonical
+    /// default port is preserved.
+    #[test]
+    fn default_config_port_is_8765() {
+        let cfg = McpHttpConfig::default();
+        assert_eq!(cfg.port, 8765);
+        // bind_addr reflects both host and port correctly.
+        assert_eq!(cfg.bind_addr(), "127.0.0.1:8765");
+    }
 }
