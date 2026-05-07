@@ -930,6 +930,7 @@ dependencies = [
 name = "dcc-mcp-jsonrpc"
 version = "0.15.4"
 dependencies = [
+ "dcc-mcp-protocols",
  "serde",
  "serde_json",
  "workspace-hack",
@@ -6026,8 +6027,6 @@ dependencies = [
  "typenum",
  "winapi",
  "windows",
- "windows-sys 0.52.0",
- "windows-sys 0.60.2",
  "windows-sys 0.61.2",
  "winnow 1.0.2",
  "zerocopy",
