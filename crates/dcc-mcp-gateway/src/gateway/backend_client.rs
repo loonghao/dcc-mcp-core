@@ -412,6 +412,12 @@ async fn rest_post(
 /// receives the same type it always has.  `input_schema` is a minimal
 /// `{"type":"object"}` — the builder only uses it to set `has_schema`,
 /// which correctly becomes `false` for tools without declared parameters.
+///
+/// The `action` field from the search hit (bare tool name such as
+/// `hello-world.greet`) is used as `McpTool.name` so the capability
+/// builder receives the same bare-name input it expects.  The `slug`
+/// field is ignored here — the builder recomputes the gateway-level
+/// slug itself via `tool_slug(dcc_type, instance_id, callable_id)`.
 pub async fn try_fetch_tools(
     client: &reqwest::Client,
     mcp_url: &str,
@@ -426,16 +432,32 @@ pub async fn try_fetch_tools(
         .map(|arr| {
             arr.iter()
                 .filter_map(|v| {
-                    let slug = v.get("slug").and_then(Value::as_str)?.to_owned();
+                    // Use `action` (bare tool name) as the McpTool name so
+                    // the capability builder's skill-extraction and slug-
+                    // computation logic works the same way it did with the
+                    // old `tools/list` JSON-RPC response.
+                    let action = v
+                        .get("action")
+                        .and_then(Value::as_str)
+                        .or_else(|| v.get("slug").and_then(Value::as_str))?
+                        .to_owned();
                     let description = v
                         .get("summary")
                         .and_then(Value::as_str)
                         .unwrap_or("")
                         .to_owned();
+                    let has_schema = v
+                        .get("has_schema")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
                     Some(McpTool {
-                        name: slug,
+                        name: action,
                         description,
-                        input_schema: json!({"type": "object"}),
+                        input_schema: if has_schema {
+                            json!({"type": "object", "properties": {}})
+                        } else {
+                            json!({"type": "object"})
+                        },
                         output_schema: None,
                         annotations: None,
                         meta: None,
