@@ -6,6 +6,7 @@ use dcc_mcp_skills::SkillCatalog;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
+use super::make_app_state_from_parts;
 use crate::handler::AppState;
 use crate::session::SessionManager;
 
@@ -47,36 +48,9 @@ fn make_state(lazy_actions: bool) -> AppState {
         Ok(json!({"name": "|pSphere1", "radius": r}))
     });
     dispatcher.register_handler("hello_world.greet", |_p| Ok(json!("hi")));
-    AppState {
-        server: dcc_mcp_http_server::ServerState {
-            sessions: SessionManager::new(),
-            executor: None,
-            server_name: "test-dcc".to_string(),
-            server_version: "0.1.0".to_string(),
-            cancelled_requests: std::sync::Arc::new(dashmap::DashMap::new()),
-            in_flight: crate::inflight::InFlightRequests::new(),
-            pending_elicitations: std::sync::Arc::new(dashmap::DashMap::new()),
-            bare_tool_names: true,
-            declared_capabilities: std::sync::Arc::new(Vec::new()),
-            jobs: std::sync::Arc::new(crate::job::JobManager::new()),
-            job_notifier: crate::notifications::JobNotifier::new(SessionManager::new(), true),
-            enable_resources: true,
-            enable_prompts: true,
-            registry_generation: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            enable_tool_cache: true,
-            #[cfg(feature = "prometheus")]
-            prometheus: None,
-            registry,
-            dispatcher,
-            catalog,
-            lazy_actions,
-        },
-        bridge_registry: crate::BridgeRegistry::new(),
-        resources: crate::resources::ResourceRegistry::new(true, false),
-        prompts: crate::prompts::PromptRegistry::new(true),
-        method_router: crate::handler::AppState::default_method_router(),
-        readiness: crate::handler::AppState::default_readiness(),
-    }
+    let mut state = make_app_state_from_parts(registry, dispatcher, catalog);
+    state.server.lazy_actions = lazy_actions;
+    state
 }
 
 fn make_router(lazy_actions: bool) -> (axum::Router, SessionManager) {
@@ -115,7 +89,7 @@ async fn call(server: &TestServer, session_id: &str, body: Value) -> Value {
 async fn meta_tools_absent_when_disabled() {
     let (router, sessions) = make_router(false);
     let sid = sessions.create();
-    sessions.set_protocol_version(&sid, "2025-06-18");
+    let _ = sessions.set_protocol_version(&sid, "2025-06-18");
     let server = TestServer::new(router);
     let body = call(
         &server,
@@ -136,7 +110,7 @@ async fn meta_tools_absent_when_disabled() {
 async fn meta_tools_present_when_enabled() {
     let (router, sessions) = make_router(true);
     let sid = sessions.create();
-    sessions.set_protocol_version(&sid, "2025-06-18");
+    let _ = sessions.set_protocol_version(&sid, "2025-06-18");
     let server = TestServer::new(router);
     let body = call(
         &server,
@@ -157,7 +131,7 @@ async fn meta_tools_present_when_enabled() {
 async fn list_actions_omits_schema_body() {
     let (router, sessions) = make_router(true);
     let sid = sessions.create();
-    sessions.set_protocol_version(&sid, "2025-06-18");
+    let _ = sessions.set_protocol_version(&sid, "2025-06-18");
     let server = TestServer::new(router);
     let body = call(
         &server,
@@ -199,7 +173,7 @@ async fn list_actions_omits_schema_body() {
 async fn describe_action_matches_tools_list_schema() {
     let (router, sessions) = make_router(true);
     let sid = sessions.create();
-    sessions.set_protocol_version(&sid, "2025-06-18");
+    let _ = sessions.set_protocol_version(&sid, "2025-06-18");
     let server = TestServer::new(router);
 
     // Fetch the same action through `tools/list` for a reference.
@@ -272,7 +246,7 @@ async fn describe_action_rejects_unknown_id() {
 async fn call_action_dispatches_to_underlying_handler() {
     let (router, sessions) = make_router(true);
     let sid = sessions.create();
-    sessions.set_protocol_version(&sid, "2025-06-18");
+    let _ = sessions.set_protocol_version(&sid, "2025-06-18");
     let server = TestServer::new(router);
     let body = call(
         &server,

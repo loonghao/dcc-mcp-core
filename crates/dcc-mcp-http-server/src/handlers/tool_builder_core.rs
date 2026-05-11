@@ -25,6 +25,7 @@ pub fn build_core_tools() -> &'static [McpTool] {
 }
 
 /// Inner builder — called exactly once per process lifetime.
+#[must_use]
 pub fn build_core_tools_inner() -> Vec<McpTool> {
     vec![
         McpTool {

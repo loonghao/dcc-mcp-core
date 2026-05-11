@@ -57,7 +57,7 @@ pub(super) async fn dispatch_sync_tool_call(
     .await;
 
     if let Some(ref rid) = request_id {
-        state.server.in_flight.remove(rid);
+        let _ = state.server.in_flight.remove(rid);
     }
     update_tracked_job(state, tracked_job_id.as_deref(), &dispatch_outcome);
 
@@ -181,7 +181,7 @@ fn early_cancelled_response(
         return Ok(None);
     }
 
-    state.server.in_flight.remove(rid);
+    let _ = state.server.in_flight.remove(rid);
     state.server.cancelled_requests.remove(rid);
     tracing::info!(request_id = %rid, "request cancelled before dispatch");
     Ok(Some(cancelled_response(state, req, rid, true)?))

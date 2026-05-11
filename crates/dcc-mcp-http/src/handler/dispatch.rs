@@ -28,7 +28,7 @@ pub(crate) async fn dispatch_request(
 ) -> Result<JsonRpcResponse, HttpError> {
     // Refresh session TTL on every request so active sessions are not evicted.
     if let Some(id) = session_id {
-        state.server.sessions.touch(id);
+        let _ = state.server.sessions.touch(id);
     }
     // Pluggable method router (#492). Built-ins are pre-registered by
     // `AppState::default_method_router`; embedders may add custom
@@ -43,11 +43,11 @@ pub(crate) async fn handle_initialize(
 ) -> Result<JsonRpcResponse, HttpError> {
     // Create or mark session as initialized
     let sid = if let Some(id) = session_id {
-        state.server.sessions.mark_initialized(id);
+        let _ = state.server.sessions.mark_initialized(id);
         id.to_owned()
     } else {
         let id = state.server.sessions.create();
-        state.server.sessions.mark_initialized(&id);
+        let _ = state.server.sessions.mark_initialized(&id);
         id
     };
 
@@ -61,7 +61,7 @@ pub(crate) async fn handle_initialize(
     let negotiated = negotiate_protocol_version(client_version);
 
     // Store the negotiated version on the session for later handlers.
-    state.server.sessions.set_protocol_version(&sid, negotiated);
+    let _ = state.server.sessions.set_protocol_version(&sid, negotiated);
 
     // Negotiate vendored delta-tools capability.
     let client_wants_delta = req
@@ -73,7 +73,7 @@ pub(crate) async fn handle_initialize(
         .and_then(|d| d.get("enabled"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    state
+    let _ = state
         .server
         .sessions
         .set_supports_delta_tools(&sid, client_wants_delta);
@@ -85,7 +85,7 @@ pub(crate) async fn handle_initialize(
         .and_then(|p| p.get("capabilities"))
         .and_then(|c| c.get("roots"))
         .is_some();
-    state
+    let _ = state
         .server
         .sessions
         .set_supports_roots(&sid, client_supports_roots);
@@ -302,7 +302,7 @@ pub(crate) async fn handle_tools_list(
             generation: current_gen,
             total,
         };
-        state.server.sessions.set_tool_list_snapshot(sid, snapshot);
+        let _ = state.server.sessions.set_tool_list_snapshot(sid, snapshot);
     }
 
     // 4. Session-scoped dynamic tools (issue #462).
