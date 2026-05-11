@@ -16,6 +16,7 @@
 //! module paths for source compatibility.
 
 #![forbid(unsafe_code)]
+#![allow(clippy::must_use_candidate)]
 
 pub mod dynamic_tools;
 pub mod executor;
