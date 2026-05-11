@@ -23,6 +23,7 @@ pub mod handlers;
 pub mod host_bridge;
 pub mod inflight;
 pub mod notifications;
+pub mod server_state;
 pub mod session;
 pub mod workspace;
 
@@ -42,6 +43,9 @@ pub use inflight::{
     CANCEL_GRACE_PERIOD, CancelToken, InFlightEntry, InFlightRequests, ProgressReporter,
 };
 pub use notifications::{JobNotifier, WorkflowProgress, WorkflowUpdate};
+pub use server_state::{
+    CANCELLED_REQUEST_TTL, ELICITATION_TIMEOUT, ROOTS_REFRESH_TIMEOUT, ServerState,
+};
 pub use session::{
     McpSession, SessionLogLevel, SessionLogMessage, SessionManager, ToolListSnapshot,
 };
