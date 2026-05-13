@@ -11,6 +11,20 @@
 - add cross-platform shell support to justfile
 - resolve isort issues and migrate CI to vx
 
+## [0.15.10](https://github.com/loonghao/dcc-mcp-core/compare/v0.15.9...v0.15.10) (2026-05-13)
+
+
+### Features
+
+* **admin-ui:** expand call trace details ([#961](https://github.com/loonghao/dcc-mcp-core/issues/961)) ([0a2a888](https://github.com/loonghao/dcc-mcp-core/commit/0a2a8882e26f82af37a3af7c8b05cfb038df1315))
+* **admin:** persist audit traces as jsonl ([#964](https://github.com/loonghao/dcc-mcp-core/issues/964)) ([fac89f6](https://github.com/loonghao/dcc-mcp-core/commit/fac89f600830bbfb947079d8edde80ade31415b5))
+
+
+### Documentation
+
+* refresh gateway admin observability docs ([2c714b0](https://github.com/loonghao/dcc-mcp-core/commit/2c714b06fde6527b4828fa91b6506d662a4a4f3f))
+* **zh:** sync admin ui guide ([#962](https://github.com/loonghao/dcc-mcp-core/issues/962)) ([77a1165](https://github.com/loonghao/dcc-mcp-core/commit/77a1165128201e9e321bf9b1a72624d2f1653d93))
+
 ## [0.15.9](https://github.com/loonghao/dcc-mcp-core/compare/v0.15.8...v0.15.9) (2026-05-12)
 
 
