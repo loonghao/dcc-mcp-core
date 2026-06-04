@@ -852,8 +852,9 @@ endpoints. Each webhook specifies:
 - `delivery.attempts` — retry count (default `3`).
 - `delivery.timeout_ms` — per-attempt timeout (default `2_000` ms).
 - `backoff_ms` — per-retry delay sequence (default `[200, 1000, 5000]` ms).
-- `payload_template` — optional `{{source.dcc_type}}` / `{{attributes.*}}`
-  template string. When omitted, the raw event envelope is POSTed as JSON.
+- `payload_template` — optional template string using double-braced
+  `source.dcc_type` / `attributes.*` paths. When omitted, the raw event
+  envelope is POSTed as JSON.
 
 Example `webhooks.yaml` to forward analytics events:
 

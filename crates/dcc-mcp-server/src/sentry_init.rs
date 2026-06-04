@@ -54,7 +54,7 @@ pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
         dsn: Some(parsed_dsn),
         release: Some(release.into()),
         environment: Some(environment.into()),
-        traces_sample_rate: sample_rate,
+        sample_rate,
         ..Default::default()
     });
 
