@@ -16,54 +16,54 @@
 
 /// Initialise the Sentry SDK if `DCC_MCP_SENTRY_DSN` is set.
 ///
-/// Returns `true` when Sentry was successfully initialised.
-pub fn init_sentry() -> bool {
-    let Some(dsn) = std::env::var("DCC_MCP_SENTRY_DSN")
+/// Returns the client guard that must be held for the process lifetime.
+/// Dropping the guard flushes pending events and shuts down the SDK.
+pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
+    let dsn = std::env::var("DCC_MCP_SENTRY_DSN")
         .ok()
-        .filter(|s| !s.trim().is_empty())
-    else {
-        return false;
-    };
+        .filter(|s| !s.trim().is_empty())?;
 
-    let environment: std::borrow::Cow<'static, str> = std::env::var("DCC_MCP_SENTRY_ENVIRONMENT")
+    let environment = std::env::var("DCC_MCP_SENTRY_ENVIRONMENT")
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .map(Into::into)
         .unwrap_or_else(|| "production".into());
 
-    let release: std::borrow::Cow<'static, str> = std::env::var("DCC_MCP_SENTRY_RELEASE")
+    let release = std::env::var("DCC_MCP_SENTRY_RELEASE")
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .map(Into::into)
         .unwrap_or_else(|| env!("CARGO_PKG_VERSION").into());
 
-    let sample_rate: f32 = std::env::var("DCC_MCP_SENTRY_SAMPLE_RATE")
+    let sample_rate = std::env::var("DCC_MCP_SENTRY_SAMPLE_RATE")
         .ok()
         .and_then(|s| s.parse::<f32>().ok())
         .filter(|r| r.is_finite() && *r >= 0.0 && *r <= 1.0)
         .unwrap_or(1.0);
 
-    let dsn_log = dsn.clone();
+    let parsed_dsn: sentry::types::Dsn = match dsn.parse() {
+        Ok(dsn) => dsn,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                "DCC_MCP_SENTRY_DSN is not a valid Sentry DSN; skipping Sentry init"
+            );
+            return None;
+        }
+    };
 
     let guard = sentry::init(sentry::ClientOptions {
-        dsn: Some(
-            dsn.parse()
-                .expect("DCC_MCP_SENTRY_DSN must be a valid Sentry DSN"),
-        ),
-        release: Some(release),
-        environment: Some(environment),
+        dsn: Some(parsed_dsn),
+        release: Some(release.into()),
+        environment: Some(environment.into()),
         traces_sample_rate: sample_rate,
         ..Default::default()
     });
 
-    // Leak the guard so Sentry stays alive for the process lifetime.
-    std::mem::forget(guard);
-
     tracing::info!(
-        dsn = %dsn_log,
+        sentry_enabled = true,
+        environment = %std::env::var("DCC_MCP_SENTRY_ENVIRONMENT").unwrap_or_else(|_| "production".into()),
         sample_rate,
         "sentry initialised",
     );
 
-    true
+    Some(guard)
 }

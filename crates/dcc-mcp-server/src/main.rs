@@ -564,9 +564,7 @@ async fn main() -> anyhow::Result<()> {
 
     // ── Auto-init Sentry from DCC_MCP_SENTRY_DSN ─────────────────────────
     #[cfg(feature = "sentry")]
-    {
-        sentry_init::init_sentry();
-    }
+    let _sentry_guard = sentry_init::init_sentry();
 
     let args = Args::parse();
 
