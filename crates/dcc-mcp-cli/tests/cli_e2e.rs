@@ -1673,7 +1673,8 @@ fn marketplace_explicit_source_is_exclusive_regression() {
         .to_string();
     std::fs::write(
         &config_path,
-        json!({"sources": [{"name": "config", "url": config_catalog.to_string_lossy()}]}).to_string(),
+        json!({"sources": [{"name": "config", "url": config_catalog.to_string_lossy()}]})
+            .to_string(),
     )
     .unwrap();
 
