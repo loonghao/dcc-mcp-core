@@ -719,7 +719,7 @@ impl MarketplaceService {
                 .collect();
             return Ok(dedupe_sources(sources));
         }
-        Ok(self.list_sources()?)
+        self.list_sources()
     }
 
     async fn load_source_entries(
