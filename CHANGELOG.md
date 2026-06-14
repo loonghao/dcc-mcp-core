@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.24](https://github.com/dcc-mcp/dcc-mcp-core/compare/v0.18.23...v0.18.24) (2026-06-14)
+
+
+### Bug Fixes
+
+* cargo fmt import ordering in buffer.rs ([346fad7](https://github.com/dcc-mcp/dcc-mcp-core/commit/346fad7d10fcd0d1180a3b5134e1a6dca1987f3c))
+* gate admin-only gateway code ([a20e27e](https://github.com/dcc-mcp/dcc-mcp-core/commit/a20e27e427bb2c4e3160babdafef16bcb2c093dc))
+* make release webhook notification optional ([62482f1](https://github.com/dcc-mcp/dcc-mcp-core/commit/62482f18cf270d428938e0ed77e01e04d2a174cc))
+* regenerate workspace-hack after bytemuck dependency introduction ([14229ea](https://github.com/dcc-mcp/dcc-mcp-core/commit/14229ea26f16fa2137c6c7ff22517d702bd4a019))
+* remove deprecated Python::is_initialized() for pyo3 0.28 compat ([8c477c6](https://github.com/dcc-mcp/dcc-mcp-core/commit/8c477c64bb605650d37bf7383d5d2a92dee5263e))
+
+
+### Code Refactoring
+
+* Phase 1 unsafe cleanup — shared test-utils crate, bytemuck shm, safe pyo3 API ([8090d55](https://github.com/dcc-mcp/dcc-mcp-core/commit/8090d559eedd5923c0af40d5f6f2d504880acac5))
+
 ## [0.18.23](https://github.com/dcc-mcp/dcc-mcp-core/compare/v0.18.22...v0.18.23) (2026-06-13)
 
 
